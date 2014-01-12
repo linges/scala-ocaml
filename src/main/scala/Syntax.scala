@@ -21,12 +21,16 @@ case class Var(v: String) extends Expr
 case class OList(l: List[Expr]) extends Expr
 
 case class Let(p: Pattern, v: Expr) extends Expr
-case class LetFun(id: String,args: List[String], v: Expr) extends Expr
+case class LetFun(id: String, args: List[String], v: Expr) extends Expr
 
-case class Pattern()
+abstract class Pattern
+case class PVar(v: String) extends Pattern
 
 case class Conditional(condition: Expr, thenE: Expr, elseE: Expr) extends Expr
 
+case class InfixOp(a: Expr, op: String, b: Expr) extends Expr
+case class App(f: Expr, x: Expr) extends Expr
+case class Tuple(l: List[Expr]) extends Expr
 
 
   /**
@@ -39,18 +43,30 @@ object SyntaxPrettyPrinter extends PrettyPrinter {
     case e => pretty_any(e)
   }
 
-  def showExpr(e: Expr) : Doc = e match {
+  implicit def showExpr(e: Expr) : Doc = e match {
     case OInt(v) => value(v)
     case OFloat(v) => value(v)
     case True() => "true"
     case False() => "false"
+    case InfixOp(a,o,b) => a <+> text(o) <+> b 
+    case App(f,x) => parens(f <+> x)
     case OChar(c) => value(c)
-    case OString(s) => value(s)
+    case OString(s) => '"' <> string(s) <> '"'
     case Var(v) => v
     case OList(l) => brackets( lsep(l.map(showExpr), semi) )
-    case Conditional(c, t, e) => "if" <+> showExpr(c) <@> "then" <+>
-      nest(line <> showExpr(t)) <@> "else" <> nest(line <> showExpr(e))
+    case Conditional(c, t, e) => "if" <+> showExpr(c) <+> "then" <+>
+      nest(line <> showExpr(t)) <+> "else" <+> nest(line <> showExpr(e))
+    case Let(p, v) => group("let" <+> p <+> "=" <> nest(line <> v))
+    case LetFun(id, l, v) =>  group("let" <+> l.foldLeft(text(id)){ _ <+> _ } 
+                              <+> "=" <> nest(line <> v))
+    case Tuple(l) => list(l, "", showExpr)
   }
+
+  implicit def showPattern(e: Pattern) : Doc = e match {
+    case PVar(v) => value(v)
+  }
+
+  def catList(l: List[Doc], sep: Doc): Doc = (group(nest(lsep(l, sep))))
   /*
     def showExpr(t: Expr): Doc = t match {
       case Conditional(c, t, e, a) => ifLex <+> showExpr(c) <@> thenLex <+> nest(line <> showExpr(t)) <@> elseLex <> nest(line <> showExpr(e))

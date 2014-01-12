@@ -13,6 +13,12 @@ trait TestExamples extends FunSuite {
     compare(result, expect)
   }
 
+  test("negative int"){
+    val result = OInt(-2)
+    val expect = "-2"
+    compare(result, expect)
+  }
+
   test("float"){
     val result = OFloat(2.3)
     val expect = "2.3"
@@ -20,7 +26,7 @@ trait TestExamples extends FunSuite {
   }
 
   test("string"){
-    val result = OFloat(2.3)
+    val result = OString("string") 
     val expect = """"string""""
     compare(result, expect)
   }
@@ -50,46 +56,47 @@ trait TestExamples extends FunSuite {
   }
 
   test("simple let"){
-    val result = OInt(2)
+    val result = Let(PVar("x"),OInt(3)) 
     val expect = "let x = 3"
+    println(SyntaxPrettyPrinter.pretty(result))
     compare(result, expect)
   }
 
   test("fun let 1"){
-    val result = OInt(2)
-    val expect = "let square x = x * x"
+    val result = LetFun("square", List("x"), Var("x"))
+    val expect = "let square x = x"
     compare(result, expect)
   }
-
   test("fun let 2"){
-    val result = OInt(2)
+    val result = LetFun("ratio", List("x","y"),
+                     InfixOp(
+                        App(Var("Float.of_int"),Var("x"))  , "/.",
+                        App(Var("Float.of_int"),Var("y"))  
+                     ))
     val expect = """let ratio x y = 
-                      Float.of_int x /. Float.of_int y"""
+                      (Float.of_int x) /. (Float.of_int y)"""
     compare(result, expect)
   }
 
   test("application"){
-    val result = OInt(2)
-    val expect = """ratio 4 7"""
+    val result = App(App(Var("ratio"),OInt(4)),OInt(7)) 
+    val expect = """((ratio 4) 7)"""
     compare(result, expect)
   }
 
   test("if"){
-    val result = OInt(2)
-    val expect = """
-    let sum_if_true test first second =
-        (if test first then first else 0)
-        + (if test second then second else 0)
-    """
+    val result = Conditional(True(), OInt(1), OInt(0)) 
+    val expect = """if true then 1 else 0"""
     compare(result, expect)
   }
 
   test("tuple"){
-    val result = OInt(2)
-    val expect = """(3,2)"""
+    val result = Tuple(List(OInt(3),OInt(2)))
+    val expect = """(3, 2)"""
     compare(result, expect)
   }
 
+/*
   test("let tuple pattern"){
     val result = OInt(2)
     val expect = """
@@ -390,5 +397,6 @@ trait TestExamples extends FunSuite {
     compare(result, expect)
   }
 
+  */
 
 }
