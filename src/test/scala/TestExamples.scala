@@ -5,7 +5,12 @@ import scala.io.Source
 import scalaocaml._
 
 trait TestExamples extends FunSuite {
-  def compare(result: Expr, expect: String)
+  def compare(result: Any, expect: String)
+
+  implicit def intToOCaml(i:Int) = OInt(i)
+  implicit def stringToVar(s:String) = Var(s) 
+  implicit def tupleToRecordField(t: Tuple2[String,Type]) = 
+    ImmutableRecordField(t._1,t._2)
 
   test("int"){
     val result = OInt(2)
@@ -32,26 +37,26 @@ trait TestExamples extends FunSuite {
   }
 
   test("int operator"){
-    val result = OInt(2)
-    val expect = "2 + 3"
+    val result = InfixOp(OInt(2),"+", OInt(3))
+    val expect = "(2 + 3)"
     compare(result, expect)
   }
 
-  test("prefix int operator"){
-    val result = OInt(2)
-    val expect = "( + ) 2 3"
+  test("prefix binary operator"){
+    val result = PrefixBinaryOp("+", OInt(2), OInt(3)) 
+    val expect = "((+) 2 3)"
     compare(result, expect)
   }
 
   test("prefix minus "){
-    val result = OInt(2)
-    val expect = "- x"
+    val result = UnaryOp("-","x") 
+    val expect = "(- x)"
     compare(result, expect)
   }
 
   test("float operator"){
-    val result = OInt(2)
-    val expect = "2.2 +. 3.3"
+    val result = InfixOp(OFloat(2.2), "+.", OFloat(3.3))
+    val expect = "(2.2 +. 3.3)"
     compare(result, expect)
   }
 
@@ -63,18 +68,18 @@ trait TestExamples extends FunSuite {
   }
 
   test("fun let 1"){
-    val result = LetFun("square", List("x"), Var("x"))
+    val result = LetFun("square", List(PVar("x")), Var("x"))
     val expect = "let square x = x"
     compare(result, expect)
   }
   test("fun let 2"){
-    val result = LetFun("ratio", List("x","y"),
+    val result = LetFun("ratio", List(PVar("x"),PVar("y")),
                      InfixOp(
                         App(Var("Float.of_int"),Var("x"))  , "/.",
                         App(Var("Float.of_int"),Var("y"))  
                      ))
     val expect = """let ratio x y = 
-                      (Float.of_int x) /. (Float.of_int y)"""
+                      ((Float.of_int x) /. (Float.of_int y))"""
     compare(result, expect)
   }
 
@@ -91,104 +96,119 @@ trait TestExamples extends FunSuite {
   }
 
   test("tuple"){
-    val result = Tuple(List(OInt(3),OInt(2)))
+    val result = Tuple(OInt(3),OInt(2))
     val expect = """(3, 2)"""
     compare(result, expect)
   }
 
-/*
   test("let tuple pattern"){
-    val result = OInt(2)
+    val result = LetFun("di", 
+      List(PTuple(PVar("x1"),PVar("y1")),
+           PTuple(PVar("x2"),PVar("y2"))),
+           App(Var("sqrt"),
+             InfixOp(
+               InfixOp(Var("x1"), "-.", Var("x2"))
+               ,"**",OFloat(2.0))))
     val expect = """
-    let distance (x1,y1) (x2,y2) =
-        sqrt ((x1 -. x2) ** 2. +. (y1 -. y2) ** 2.)
+    let di (x1, y1) (x2, y2) = 
+        (sqrt ((x1 -. x2) ** 2.0))
     """
     compare(result, expect)
   }
 
   test("list"){
-    val result = OInt(2)
+    val result = OList(OString("OCaml"),OString("Perl"),OString("C"))
     val expect = """["OCaml"; "Perl"; "C"]"""
     compare(result, expect)
   }
 
   test("list ::"){
-    val result = OInt(2)
-    val expect = """ 1 :: (2 :: [])"""
+    val result = InfixOp(OInt(1), "::", InfixOp(OInt(2), "::", OList()))
+    val expect = """(1 :: (2 :: []))"""
     compare(result, expect)
   }
 
   test("list @ list"){
-    val result = OInt(2)
-    val expect = """[1;2;3] @ [4;5;6]"""
+    val result = InfixOp(OList(1,2,3), "@", OList(4,5,6))
+    val expect = """([1; 2; 3] @ [4; 5; 6])"""
     compare(result, expect)
   }
 
   test("let list pattern"){
-    val result = OInt(2)
+    val result = LetFun("my_favorite_language",List( 
+      PList(PVar("my_favorite"),PVar("the_rest"))), Var("my_favorite"))
     val expect = """let my_favorite_language (my_favorite :: the_rest) =
      my_favorite"""
     compare(result, expect)
   }
 
   test("match  list pattern"){
-    val result = OInt(2)
+    val result = Match(Var("languages"),
+       Branch(PList(PVar("first"),PVar("the_rest")), Var("first")),
+       Branch(PList(),OString("OCaml")
+      ))
     val expect = """
     match languages with
-    | first :: the_rest -> first
+    | (first :: the_rest) -> first
     | [] -> "OCaml"""" 
     compare(result, expect)
   }
 
   test("options"){
-    val result = OInt(2)
+    val result = LetFun("divide", List(PVar("x"),PVar("y")),
+      Conditional(InfixOp(Var("y"),"=", OInt(0)),
+        Var("None"),
+        App("Some", InfixOp("x", "/", "y"))))
     val expect = """
-    let divide x y =
-    if y = 0 then None else Some (x/y)
+    let divide x y = 
+    if (y = 0) then None else (Some (x / y))
     """ 
     compare(result, expect)
   }
 
   test("let in"){
-    val result = OInt(2)
+    val result = LetIn(PVar("x"), OInt(7), InfixOp("x","+", "x"))
     val expect = """
     let x = 7 in
-        x + x
+        (x + x)
     """ 
     compare(result, expect)
   }
 
   test("nested let in"){
-    val result = OInt(2)
+    val result = LetIn(PVar("x"), OInt(7), 
+      LetIn(PVar("y"), InfixOp("x","*", "x"), InfixOp("x", "+","y")))
     val expect = """
     let x = 7 in
-    let y = x * x in
-    x + y
+    let y = (x * x) in
+    (x + y)
     """ 
     compare(result, expect)
   }
 
   test("record type"){
-    val result = OInt(2)
+    val result = TypeDecl(List(), "point2d", 
+      TRecord("x" -> TVar("float"), "y" -> TVar("float")))
     val expect = """
-    type point2d = { x : float; y : float }
+    type point2d = {x : float; y : float}
     """ 
     compare(result, expect)
   }
 
   test("record"){
-    val result = OInt(2)
+    val result = Record(Map("x" -> OFloat(3.0), "y" -> OFloat(-4.0))) 
     val expect = """
-    { x = 3.; y = -4. }
+    {x = 3.0; y = -4.0}
     """ 
     compare(result, expect)
   }
 
   test("let record pattern"){
-    val result = OInt(2)
+    val result = LetFun("mag", 
+      List(PRecord(Map("x"-> PVar("x_pos"), "y" -> PVar("y_pos")))),
+      "y_pos")
     val expect = """
-    let magnitude { x = x_pos; y = y_pos } =
-        sqrt (x_pos ** 2. +. y_pos ** 2.);;
+    let mag {x = x_pos; y = y_pos} = y_pos
     """ 
     compare(result, expect)
   }
@@ -202,27 +222,28 @@ trait TestExamples extends FunSuite {
   }
 
   test("record access"){
-    val result = OInt(2)
+    val result = RecordAccess("r", "x") 
     val expect = """r.x""" 
     compare(result, expect)
   }
 
   test("variant type"){
-    val result = OInt(2)
+    val result = TypeDecl(List(), "foobar",
+      TVariant(VariantField("Foo", TVar("int")), Constant("Bar")))
     val expect = """
-    type foobar =
-    | Foo of int 
-    | Bar of int 
+    type foobar = | Foo of int| Bar  
     """ 
     compare(result, expect)
   }
 
   test("match variant"){
-    val result = OInt(2)
+    val result = Match("fb", 
+      Branch(PVariant("Foo",PVar("x")), "x"),
+      Branch(PVariant("Bar",PVar("x")), "x"))
     val expect = """
     match fb with
-    | Foo x -> x
-    | Bar x -> x
+    | Foo(x) -> x
+    | Bar(x) -> x
     """ 
     compare(result, expect)
   }
@@ -236,52 +257,80 @@ trait TestExamples extends FunSuite {
   }
 
   test("mutable record type"){
-    val result = OInt(2)
+    val result = TypeDecl(List(),"running_sum", 
+      TRecord(MutableRecordField("sum" , TVar("float")),
+        MutableRecordField("samples" , TVar("int"))))
     val expect = """
     type running_sum =
-    { mutable sum: float;
-      mutable sum_sq: float;
-      mutable samples: int;
-    }
+    {mutable sum : float;
+      mutable samples : int}
     """ 
     compare(result, expect)
   }
 
-  test("create mutable record"){
-    val result = OInt(2)
-    val expect = """let create () = { sum = 0.; sum_sq = 0.; samples = 0 }
+  test("unit as pattern"){
+    val result = LetFun("create",List(PUnit),Record(Map("sum" -> OFloat(0.0))))
+    val expect = """let create () = {sum = 0.0}
     """ 
     compare(result, expect)
   }
 
   test("update mutable record and sequence"){
-    val result = OInt(2)
-    val expect = """let update rsum x =
-     rsum.samples <- rsum.samples + 1;
-     rsum.sum     <- rsum.sum     +. x;
-     rsum.sum_sq  <- rsum.sum_sq  +. x *. x 
+    val result = Sequence(RecordUpdate("r", "samples", OInt(1)),
+      RecordUpdate("r", "sum", Var("x")))
+    val expect = """
+     r.samples <- 1;
+     r.sum     <- x
     """ 
     compare(result, expect)
   }
 
   test("unit"){
-    val result = OInt(2)
+    val result = Unit 
     val expect = "()"
     compare(result, expect)
   }
 
   test("unit type"){
-    val result = OInt(2)
+    val result = TVar("unit")
     val expect = "unit"
     compare(result, expect)
   }
 
   test("polymorphic type"){
-    val result = OInt(2)
-    val expect = """type 'a ref = { mutable contents : 'a }"""
+    val result = TypeDecl(List("a"), "ref", TRecord(MutableRecordField("contents", PolyVar("a"))))
+    val expect = """type ('a) ref = {mutable contents : 'a}"""
     compare(result, expect)
   }
 
+  test("let rec"){
+    val result = LetRec("f", List(PVar("x")), App("f","x")) 
+    val expect = """let rec f x = (f x)"""
+    compare(result, expect)
+  }
+
+  test("anonymous functions"){
+    val result = Fun(List("x", "y"), "x") 
+    val expect = """
+    (fun x y -> x)
+    """
+    compare(result, expect)
+  }
+  test("or pattern and underscore pattern"){
+    val result = Match("list", 
+      Branch(OrPattern(FixSizeList(List()),FixSizeList(List(Underscore))),"None"))
+    val expect = """match list with
+    | [] | [_] -> None"""
+    compare(result, expect)
+  }
+
+  test("let operator "){
+    val result = LetFun("(¦>)", List(PVar("x"), PVar("f")), App("f", "x"))
+    val expect = """ let (|>) x f = (f x)"""
+    compare(result, expect)
+  }
+
+/*
   test("for"){
     val result = OInt(2)
     val expect = """
@@ -308,33 +357,6 @@ trait TestExamples extends FunSuite {
     done;
     if !pos = Array.length array then None else Some !pos
     """
-    compare(result, expect)
-  }
-
-  test("anonymous functions"){
-    val result = OInt(2)
-    val expect = """
-    (fun x -> x + 1)
-    """
-    compare(result, expect)
-  }
-
-  test("let rec"){
-    val result = OInt(2)
-    val expect = """let rec f x = f x"""
-    compare(result, expect)
-  }
-
-  test("or pattern and underscore pattern"){
-    val result = OInt(2)
-    val expect = """match list with
-    | [] | [_] -> None"""
-    compare(result, expect)
-  }
-
-  test("let operator "){
-    val result = OInt(2)
-    val expect = """ let (|>) x f = f x"""
     compare(result, expect)
   }
 

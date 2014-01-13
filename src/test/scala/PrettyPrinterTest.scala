@@ -7,13 +7,14 @@ import scalaocaml._
 class PrettyPrinterTest extends FunSuite with TestExamples
 {
 
-  def compare(result: Expr, expect: String) = {
+  def compare(result: Any, expect: String) = {
     val a = cleanString(SyntaxPrettyPrinter.pretty(result))
     val b = cleanString(expect)
-    println(a + " = " + b)
+    println(a + " \n" + b)
+    println(SyntaxPrettyPrinter.pretty(result))
     assert(a == b)
   }
 
   def cleanString(s:String) = 
-    s.replaceAll("[\n\r]","").replaceAll("  ", "").trim
+    s.replaceAll("[\n\r]"," ").replaceAll("\\s+", " ").trim
 }
