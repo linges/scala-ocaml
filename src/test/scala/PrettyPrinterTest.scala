@@ -10,8 +10,10 @@ class PrettyPrinterTest extends FunSuite with TestExamples
   def compare(result: Any, expect: String) = {
     val a = cleanString(SyntaxPrettyPrinter.pretty(result))
     val b = cleanString(expect)
-    println(a + " \n" + b)
-    println(SyntaxPrettyPrinter.pretty(result))
+    if(a != b){
+        println(a + " \n" + b)
+        println(SyntaxPrettyPrinter.pretty(result))
+    }
     assert(a == b)
   }
 
