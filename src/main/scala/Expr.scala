@@ -8,6 +8,7 @@ trait Expr
   * and constant constructors from both normal and polymorphic variants, 
   * as well as the special constants false, true, (), [], and [||], 
   * which behave like constant constructors, and begin end, which is equivalent to (). 
+  * A pattern consisting in a constant matches the values that are equal to this constant.
   */
 sealed abstract class Constant extends Expr with Pattern 
 case class OInt(n: Int) extends Constant

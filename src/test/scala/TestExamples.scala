@@ -243,7 +243,7 @@ trait TestExamples extends FunSuite {
 
   test("let record pattern") {
     val result = Let(FunBinding("mag",
-      List(PRecord(Map("x" -> PVar("x_pos"), "y" -> PVar("y_pos")))),
+      List(PRecord(Map(Name("x") -> PVar("x_pos"), Name("y") -> PVar("y_pos")))),
       "y_pos"))
     val expect = """
     let mag {x = x_pos; y = y_pos} = y_pos
@@ -252,9 +252,9 @@ trait TestExamples extends FunSuite {
   }
 
   test("let record pattern field punning") {
-    val result = OInt(2)
+    val result = Let(FunBinding("mag", List(RecordPunning(Name("x"), Name("y"))), "x"))
     val expect = """
-    let magnitude { x; y } = sqrt (x ** 2. +. y ** 2.)
+    let mag {x; y} = x 
     """
     compare(result, expect)
   }
@@ -512,6 +512,24 @@ trait TestExamples extends FunSuite {
     """
     compare(result, expect)
   }
+
+  test("array and alias pattern") {
+    val result = Alias(ArrayPattern(OInt(1),OInt(2)), "a")
+    val expect = """ 
+    [|1; 2|] as a
+    """
+    compare(result, expect)
+  }
+
+  test("Typeconstr pattern") {
+    val result = PTypeconstr(Name("foo")) 
+    val expect = """ 
+    #foo
+    """
+    compare(result, expect)
+  }
+
+
 
 
   /*

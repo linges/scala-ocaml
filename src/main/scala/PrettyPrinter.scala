@@ -11,6 +11,7 @@ object SyntaxPrettyPrinter extends PrettyPrinter {
     case e: Type => super.pretty(showType(e))
     case e: Expr => super.pretty(showExpr(e))
     case e: TopLevel => super.pretty(showTopLevel(e))
+    case e: Pattern => super.pretty(showPattern(e))
     case e => pretty_any(e)
   }
 
@@ -136,10 +137,14 @@ object SyntaxPrettyPrinter extends PrettyPrinter {
     case PRecord(m) => enclose("{",  catList(m.map{
       case (s,t) => s <+> "=" <+> t }.toList, semi)
         ,"}")
+    case RecordPunning(m@ _*) => enclose("{", catList(m.map(showName), semi) ,"}")
     case ConstrPattern(n) => n
     case ConstrPattern(n, p@ _*) => n <> parens(catList(p.map(showPattern),comma))
     case OrPattern(a,b) => a <+> "|" <+> b
     case FixSizeList(l) => brackets( catList(l.map(showPattern), semi) )
+    case ArrayPattern(l@ _*)         => enclose("[|", catList(l.map(showPattern), semi), "|]")
+    case Alias(p,n) => p <+> "as" <+> n
+    case PTypeconstr(n) => "#" <> n
     case Underscore => "_"
   }
 
