@@ -2,7 +2,16 @@ package scalaocaml
 
 
 abstract class TopLevel
-case class TypeDecl(tyvars: List[String], id: String, t: Type) extends TopLevel
+
+/**
+  * Type definitions are introduced by the type keyword, 
+  * and consist in one or several simple definitions, 
+  * possibly mutually recursive, separated by the and keyword. 
+  * Each simple definition defines one type constructor.
+  */
+case class TypeDefinition(td: TypeDef*) extends TopLevel
+
+
 case class Let(lb: LetBinding*) extends TopLevel
 case class LetRec(lb: LetBinding*) extends TopLevel
 
@@ -17,26 +26,12 @@ object Name
 }
 
 
+
+
 sealed abstract class LetBinding
 case class Binding(p: Pattern, e: Expr) extends LetBinding
 case class FunBinding(name : String, args: List[Parameter], e: Expr, t: Option[Type] = None,
   t2: Option[Type] = None) extends LetBinding 
-
-abstract class Type
-case class TVar(v : String) extends Type
-case class PolyVar(v : String) extends Type
-case class TRecord(m: RecordField*) extends Type
-abstract class RecordField
-case class MutableRecordField(s: String,e: Type) extends RecordField
-case class ImmutableRecordField(s: String,e: Type) extends RecordField
-
-trait PolyTypeExpr
-
-case class TVariant(v: Variant*) extends Type
-abstract class Variant 
-case class VariantField(name: String, t: Type) extends Variant
-case class ConstantField(name: String) extends Variant
-
 
 trait PatternMatching 
 case class MatchingWithGuard(p: Pattern, g: Expr, e: Expr) extends PatternMatching

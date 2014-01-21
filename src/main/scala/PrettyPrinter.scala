@@ -49,17 +49,44 @@ object SyntaxPrettyPrinter extends PrettyPrinter {
         t.map(" :"<+> _).getOrElse("") <> e.map(" ="<+> _).getOrElse("") )
   }
 
-  implicit def showType(e: Type) : Doc = e match {
-    case TVar(v)         => value(v)
-    case PolyVar(v)      => "'"<>value(v)
-    case TRecord(m@ _*)  => enclose("{",  catList(m.map(showRecordField), semi)
-        ,"}")
-    case TVariant(l@ _*) => "|" <+> catList(l.map(showVariant), "|" )
+  implicit def showTagSpec(t: TagSpec) : Doc = t match {
+    case TagType(n, None) => "`" <> value(n)
+    case TagType(n, Some(t)) => "`" <> value(n) <+> "of" <+> t
+    case t : Type => showType(t)
   }
 
-  implicit def showVariant(v: Variant) : Doc = v match {
-    case VariantField(n,t) => n <+> "of" <+> t
-    case ConstantField(n)  => n
+  implicit def showTagSpecFull(t: TagSpecFull) : Doc = t match {
+    case TagTypeFull(n, None) => "`" <> value(n)
+    case TagTypeFull(n, Some(t)) => "`" <> value(n) <+> "of" <+> catList(t.map(showType), " &")
+    case t : Type => showType(t)
+  }
+
+  implicit def showType(e: Type) : Doc = e match {
+    case TypeConstr(v)         => value(v)
+    case TypeConstr(v, t)      => t <+> value(v)
+    case TypeConstr(v, ts @ _*)  => list(ts.toList, "", showType) <+> value(v)
+    case TypeIdent(v) => "'" <> value(v)
+    case TUnderscore => "_"
+    case FunctionType(t1,t2) => parens(t1 <+> "->" <+> t2)
+    case LabeledFunctionType(l, t1, t2, false) =>  parens(value(l) <> ":" <+> t1 <+> "->" <+> t2)
+    case LabeledFunctionType(l, t1, t2, true) =>  parens("?" <> value(l) <> ":" <+> t1 <+> "->" <+> t2)
+    case TupleType(ts@ _*) =>   parens(catList(ts.map(showType), " * "))
+    case TypeAlias(t, as) => parens(t <+> "as '" <> value(as))
+    case HashType(n) => parens("#" <+> n)
+    case HashType(n, t) => parens(t <+> "#" <+> n)
+    case HashType(n, ts@ _*) => parens(list(ts.toList, "", showType) <+> "#" <+> n)
+    case ObjectType(m, b) => enclose("<", catList(m.map{case (s,t) => s <+> ":" <+> t}, semi)
+        <> (if(b) " ;.." else ""), ">")
+    case ExactVariantType(ts@ _*) => brackets(catList(ts.map(showTagSpec), " |")) 
+    case OpenVariantType(ts@ _*) => brackets(">" <> catList(ts.map(showTagSpec), " |")) 
+    case CloseVariantType(ts, None) => brackets("<" <> catList(ts.map(showTagSpecFull), " |")) 
+    case CloseVariantType(ts, Some(ls)) => brackets("<" <> catList(ts.map(showTagSpecFull), " |")
+      <+> ">" <+> catList(ls.map{case s => "`" <> value(s)}, ""))
+  }
+
+  implicit def showPolyType(p : PolyType) : Doc = p match {
+    case PolymorphType(ps, t) =>  catList(ps.map(s => "'" <> s), "") <+> dot <+> t 
+    case t: Type => showType(t)
   }
 
 
@@ -124,10 +151,6 @@ object SyntaxPrettyPrinter extends PrettyPrinter {
     case Matching(p,e) => "|"<+> p <+> "->" <+> e
     case MatchingWithGuard(p,g,e) => "|"<+> p <+>"when" <+> g <+> "->" <+> e
   }
-  implicit def showRecordField(rf: RecordField) : Doc = rf match {
-    case ImmutableRecordField(s, t) => s <+> ":" <+> t
-    case MutableRecordField(s, t) => "mutable" <+> s <+> ":" <+> t
-  }
 
   implicit def showPattern(e: Pattern) : Doc = e match {
     case c: Constant => showConstant(c)
@@ -153,12 +176,50 @@ object SyntaxPrettyPrinter extends PrettyPrinter {
     case Name(n, l) => catList(l.map(string),dot) <> dot <> n
   }
 
+  implicit def showTypeDef(e: TypeDef) : Doc = e match {
+    case TypeDef(tvars, constr, t, tr, cs) => {
+      showTypeParameters(tvars) <+> constr <>
+      t.map(" =" <+> showType(_)).getOrElse("") <>
+      tr.map(" =" <+> showTypeRepresentation(_)).getOrElse("") <@>
+      catList(cs.map(showTypeConstraint), linebreak)
+    }
+  }
+ 
+  def showTypeConstraint(cs: TypeConstraint) : Doc = cs match {
+    case TypeConstraint(id, t) => "constraint '" <> id <+> "=" <+> t 
+  }
+
+  def showTypeRepresentation(tr: TypeRepresentation) : Doc = tr match {
+    case TRecord(m@ _*)  => enclose("{",  catList(m.map(showRecordField), semi)
+        ,"}")
+    case ConstrDeclarations(l@ _*) => "|" <+> catList(l.map(showConstrDec), line <> "|" )
+  }
+
+  def showConstrDec(cd: ConstrDecl) : Doc = cd match {
+    case ConstrDecl(s) => value(s)
+    case ConstrDecl(s, ts@ _*) => value(s) <+> "of" <+> catList(ts.map(showType), " *")
+  }
+
+  implicit def showRecordField(rf: RecordField) : Doc = rf match {
+    case ImmutableRecordField(s, t) => s <+> ":" <+> t
+    case MutableRecordField(s, t) => "mutable" <+> s <+> ":" <+> t
+  }
+
+  def showTypeParameters(ts: List[TypeParameter]) : Doc = 
+    if(ts.isEmpty) ""
+    else if(ts.size == 1) showTypeParameter(ts(0))
+    else list(ts.toList, "", showTypeParameter)
+
+  def showTypeParameter(tp: TypeParameter) : Doc = tp match {
+    case TypeParameter(id, Some(Covariant)) => "+" <> "'" <> id
+    case TypeParameter(id, Some(Contravariant)) => "-" <> "'" <> id
+    case TypeParameter(id, None) => "'" <> id
+  }
+
   def showTopLevel(e: TopLevel) : Doc = e match {
     case Let(v@ _*) => group("let" <+> catList(v.map(showLetBinding), line <>"and"))
     case LetRec(v@ _*) => group("let rec" <+> catList(v.map(showLetBinding), line <>"and"))
-    case TypeDecl(Nil, id, t) =>  group("type" <+> id <+> "=" <> nest(line <> t))
-    case TypeDecl(tvs, id, t) =>  group("type" <+> parens(catList(tvs.map("'"<>_), comma))
-        <+> id <+> "=" <> nest(line <> t))
+    case TypeDefinition(v@ _*) => group("type" <+> catList(v.map(showTypeDef), line <>"and"))
   }
   def catList(l: Seq[Doc], sep: Doc): Doc = (group(lsep(l.toList, sep)))
 }

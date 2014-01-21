@@ -3,28 +3,6 @@ package scalaocaml
 trait Expr
 
 /**
-  * The syntactic class of constants comprises literals from the four base types
-  * (integers, floating-point numbers, characters, character strings), 
-  * and constant constructors from both normal and polymorphic variants, 
-  * as well as the special constants false, true, (), [], and [||], 
-  * which behave like constant constructors, and begin end, which is equivalent to (). 
-  * A pattern consisting in a constant matches the values that are equal to this constant.
-  */
-sealed abstract class Constant extends Expr with Pattern 
-case class OInt(n: Int) extends Constant
-case class OFloat(n: Double) extends Constant
-sealed abstract class OBoolean extends Constant
-case object True extends OBoolean
-case object False extends OBoolean
-case class OChar(c: Char) extends Constant 
-case class OString(s: String) extends Constant
-case object Unit extends Constant
-case object EmptyList extends Constant 
-case object EmptyArray extends Constant 
-case object EmptyBeginEnd extends Constant
-case class TagName(s: String) extends Constant 
-
-/**
   * An expression consisting in an access path evaluates
   * to the value bound to this path in the current evaluation environment.
   * The path can be either a value name or an access path to a value component of a module.
@@ -313,7 +291,7 @@ case class VirtualVal(name : String, t : Type, mutable : Boolean = false) extend
 case class Initializer(e: Expr) extends ClassField // initializer expr
 case class Constraint (t1: Type, t2: Type) extends ClassField // constraint typexpr =  typexpr  
 case class Method(name: String, args: List[Parameter], e: Expr, t: Option[Type], privatee : Boolean = false) extends ClassField //method [private] method-name  {parameter}  [: typexpr] =  expr  
-case class PolyMethod(name : String, pt : PolyTypeExpr, e : Expr, privatee : Boolean = false)  extends ClassField //    method [private] method-name :  poly-typexpr =  expr  
-case class VirtualMethod(name : String, pt: PolyTypeExpr, privatee : Boolean = false)  extends ClassField //  method [private] virtual method-name :  poly-typexpr   
+case class PolyMethod(name : String, pt : PolyType, e : Expr, privatee : Boolean = false)  extends ClassField //    method [private] method-name :  poly-typexpr =  expr  
+case class VirtualMethod(name : String, pt: PolyType, privatee : Boolean = false)  extends ClassField //  method [private] virtual method-name :  poly-typexpr   
 
 sealed abstract class ClassExpr
