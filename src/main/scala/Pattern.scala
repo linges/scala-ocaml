@@ -79,3 +79,12 @@ case class ArrayPattern(ps: Pattern*) extends Pattern
   * It matches all values of type [< typeconstr ].
   */
 case class PTypeconstr(name: Name) extends Pattern
+
+trait PatternMatching 
+case class MatchingWithGuard(p: Pattern, g: Expr, e: Expr) extends PatternMatching
+case class Matching(p: Pattern, e: Expr) extends PatternMatching
+
+trait Parameter 
+case class LabeledPar(label: String, t:Option[Type] = None) extends Parameter
+case class LabeledParWithPattern(label: String, p: Pattern) extends Parameter
+case class OptionalLabeledPar(label: String, p: Option[Pattern] = None, t: Option[Type] = None, default : Option[Expr] = None) extends Parameter

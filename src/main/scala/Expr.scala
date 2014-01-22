@@ -1,6 +1,6 @@
 package scalaocaml
 
-trait Expr
+trait Expr extends Argument
 
 /**
   * An expression consisting in an access path evaluates
@@ -14,7 +14,7 @@ case class Var(v: Name) extends Expr
   * The expression expr  argument1 …  argumentn evaluates the expression expr and 
   * those appearing in argument1 to argumentn.
   */
-case class App(f: Expr, x: Expr, xs : Expr*) extends Expr
+case class App(f: Expr, x: Argument, xs : Argument*) extends Expr
 
 
 /**
@@ -34,7 +34,7 @@ case class Function(l: PatternMatching*) extends Expr
   * This expression is equivalent to:
   * {{{fun parameter1 -> … fun  parametern ->  expr}}}
   */
-case class Fun(args: List[Parameter], e: Expr, guard : Option[Expr] = None) extends Expr 
+case class Fun(pars: List[Parameter], e: Expr, guard : Option[Expr] = None) extends Expr 
 /**
   * The let and let rec constructs bind value names locally. The construct
   * {{{let pattern1 =  expr1 and … and  patternn = exprn in expr}}}
@@ -283,15 +283,11 @@ case class SelfCopy(update: Map[String, Expr]) extends Expr
   */
 case class Object(body: ClassBody) extends Expr  //TODO test
 
-case class ClassBody(cs: List[ClassField], p: Option[Pattern] = None, t : Option[Type] = None) 
-abstract class ClassField
-case class Inherit(ce: ClassExpr, as: Option[String] = None) extends ClassField //inherit class-expr  [as lowercase-ident]  
-case class Val(name : String, e : Expr, mutable : Boolean = false, t: Option[Type] = None) extends ClassField //val [mutable] inst-var-name  [: typexpr] =  expr  
-case class VirtualVal(name : String, t : Type, mutable : Boolean = false) extends ClassField // val [mutable] virtual inst-var-name :  typexpr  
-case class Initializer(e: Expr) extends ClassField // initializer expr
-case class Constraint (t1: Type, t2: Type) extends ClassField // constraint typexpr =  typexpr  
-case class Method(name: String, args: List[Parameter], e: Expr, t: Option[Type], privatee : Boolean = false) extends ClassField //method [private] method-name  {parameter}  [: typexpr] =  expr  
-case class PolyMethod(name : String, pt : PolyType, e : Expr, privatee : Boolean = false)  extends ClassField //    method [private] method-name :  poly-typexpr =  expr  
-case class VirtualMethod(name : String, pt: PolyType, privatee : Boolean = false)  extends ClassField //  method [private] virtual method-name :  poly-typexpr   
+trait Argument 
+case class LabeledArg(name: String, e: Option[Expr] = None) extends Argument
+case class OptionalLabeledArg(name: String, e: Option[Expr] = None) extends Argument
 
-sealed abstract class ClassExpr
+sealed abstract class LetBinding
+case class Binding(p: Pattern, e: Expr) extends LetBinding
+case class FunBinding(name : String, args: List[Parameter], e: Expr, t: Option[Type] = None, t2: Option[Type] = None) extends LetBinding 
+

@@ -15,6 +15,7 @@ case class TypeDefinition(td: TypeDef*) extends TopLevel
 case class Let(lb: LetBinding*) extends TopLevel
 case class LetRec(lb: LetBinding*) extends TopLevel
 
+//TODO check extended-module-name
 case class Name(id: String, path: List[String])
 object Name
 {
@@ -28,16 +29,17 @@ object Name
 
 
 
-sealed abstract class LetBinding
-case class Binding(p: Pattern, e: Expr) extends LetBinding
-case class FunBinding(name : String, args: List[Parameter], e: Expr, t: Option[Type] = None,
-  t2: Option[Type] = None) extends LetBinding 
 
-trait PatternMatching 
-case class MatchingWithGuard(p: Pattern, g: Expr, e: Expr) extends PatternMatching
-case class Matching(p: Pattern, e: Expr) extends PatternMatching
-
-trait Parameter 
-case class LabeledArg(label: String, t:Option[Type] = None) extends Parameter
-case class LabeledArgWithPattern(label: String, p: Pattern) extends Parameter
-case class OptionalLabeledArg(label: String, p: Option[Pattern] = None, t: Option[Type] = None, default : Option[Expr] = None) extends Parameter
+/**
+  * Exception definitions add new constructors to the built-in
+  * variant type exn of exception values. The constructors are declared 
+  * as for a definition of a variant type.
+  * 
+  * The form exception constr-name  [of typexpr  {* typexpr}] generates a new exception, 
+  * distinct from all other exceptions in the system. 
+  * The form exception constr-name =  constr gives an alternate 
+  * name to an existing exception. 
+  */
+abstract class OException
+case class NewException(name: String, ts: Type*) extends OException
+case class AlternateNameException(name : String, constr: Name) extends OException

@@ -5,6 +5,7 @@ import org.kiama.output.PrettyPrinter
 /**
  * Pretty printer for OCaml definitions and expressions.
  */
+//TODO split into traits
 object SyntaxPrettyPrinter extends PrettyPrinter {
   
   def pretty(t: Any): String = t match {
@@ -12,8 +13,95 @@ object SyntaxPrettyPrinter extends PrettyPrinter {
     case e: Expr => super.pretty(showExpr(e))
     case e: TopLevel => super.pretty(showTopLevel(e))
     case e: Pattern => super.pretty(showPattern(e))
+    case e: OException => super.pretty(showException(e))
+    case e: ClassType => super.pretty(showClassType(e))
+    case e: ClassExpr => super.pretty(showClassExpr(e))
     case e => pretty_any(e)
   }
+
+  def showException(e: OException) : Doc = e match {
+    case NewException(name) => "exception" <+> name
+    case NewException(name, ts@ _*) => "exception" <+> name <+> "of" <+> catList(ts.map(showType), " *")
+    case AlternateNameException(name , constr) => "exception" <+> name <+> "=" <+> constr
+  }
+
+  implicit def showClassExpr(ce: ClassExpr) : Doc = ce match {
+    case ClassAscription(e,t)      => parens(e <+> ":" <+> t)
+    case SimpleClassExpr(Nil, n) => n
+    case SimpleClassExpr(targs, n) =>
+      brackets(catList(targs.map(showType), comma)) <+> n
+    case ClassObject(b)  => "object" <+> b <@> "end"
+    case ClassLetIn(v, e) => group("let" <+> catList(v.map(showLetBinding), line <>"and") <@> "in" <> nest(line <> e))
+    case ClassLetRecIn(v, e) => group("let rec" <+> catList(v.map(showLetBinding), line <>"and") <@> "in" <> nest(line <> e))
+    case ClassApp(f,x)             => parens(f <+> x)
+    case ClassApp(f,x, xs@ _*)     => parens(f <+> x <+> catList(xs.map(showArg), space))
+    case ClassFun(args,e)  => parens("fun" <+> catList(args.map(showParameter), "") <+> "->" <+> e)
+  }
+
+  
+  implicit def showClassBody(b: ClassBody) : Doc = b match {
+    case ClassBody(cs, p, t) => (p.map{ pp =>
+      parens( pp <> t.map{ tt => " :" <+> tt}.getOrElse(""))}.getOrElse(""): Doc) <> 
+      nest(line <> lsep(cs.map(showClassField), line))
+  }
+
+  implicit def showClassField(cf: ClassField) : Doc = cf match {
+    case Inherit(ce, as) => "inherit" <+> ce <> as.map(" as" <+> _).getOrElse("")
+    case Val(name, e, muta, t) =>
+      "val" <> (if(muta) " mutable" else "") <+> name <>
+      t.map(" :" <+> _).getOrElse("") <+>
+       "=" <+> e
+    case VirtualVal(name, t, muta) =>
+      "val" <> (if(muta) " mutable" else "") <+>
+      "virtual" <+>
+      name <+> ":" <+> t
+    case Initializer(e) => "initializer" <+> e
+    case Constraint(t1,t2) => "constraint" <+> t1 <+> "=" <+> t2 
+    case Method(name, pars, e, t, priv) =>
+      "method" <> (if(priv) " private" else "") <+>
+      name <+> catList(pars.map(showParameter), "") <>
+      t.map(" :" <+> _).getOrElse("") <+> 
+      "=" <+> e
+    case PolyMethod(name, pt, e, priv) =>
+      "method" <> (if(priv) " private" else "") <+>
+      name <+> ":" <+> pt <+> "=" <+> e
+    case VirtualMethod(name, pt, priv) =>
+      "method" <> (if(priv) " private" else "") <+>
+      "virtual" <+> name <+> ":" <+> pt
+  }
+
+  implicit def showClassFieldSpec(cfs: ClassFieldSpec) : Doc = cfs match {
+    case ClassConstraint(t1,t2) => "constraint" <+> t1 <+> "=" <+> t2 
+    case MethodSpec(name, pt, priv, virt) =>
+      "method" <> (if(priv) " private" else "") <>
+      (if(virt) " virtual" else "") <+>
+      name <+> ":" <+> pt
+    case ValSpec(name, t, muta, virt) =>
+      "val" <> (if(muta) " mutable" else "") <>
+      (if(virt) " virtual" else "") <+>
+      name <+> ":" <+> t
+    case InheirtSpec(c) => "inherit" <+> c
+  }
+
+  implicit def showClassBodyType(cbt: ClassBodyType) : Doc = cbt match {
+    case SimpleClassBodyType(Nil, n) => n
+    case SimpleClassBodyType(targs, n) => 
+      brackets(catList(targs.map(showType), comma)) <+> n
+    case NormalClassBodyType(None, cfs@ _*) =>
+      "object" <@> catList(cfs.map(showClassFieldSpec), "") <@> "end"
+    case NormalClassBodyType(Some(t), cfs@ _*) =>
+      "object" <+> parens(t) <@> nest(catList(cfs.map(showClassFieldSpec), "")) <@> "end"
+  }
+
+  implicit def showClassType(ct: ClassType) : Doc = ct match {
+    case ClassType(cfs, b) => catList(cfs.map(showClassTypeFunctionArg), empty) <+> b
+  }
+  
+  implicit def showClassTypeFunctionArg(arg: ClassTypeFunctionArg) : Doc = arg match {
+    case ClassTypeFunctionArg(t, label, op) =>
+        (if(op) "?" else "") <> label.map(value(_) <> ": ").getOrElse("") <> t <+> "->"
+  }
+
 
 
   implicit def showConstant(c: Constant) : Doc = c match {
@@ -31,21 +119,21 @@ object SyntaxPrettyPrinter extends PrettyPrinter {
   }
 
   implicit def showLetBinding(lb: LetBinding) : Doc = lb match {
-    case Binding(p,e) => p <+> "=" <+> e
+    case Binding(p,e)               => p <+> "=" <+> e
     case FunBinding(n, l, e, t, t2) => n <+> catList(l.map(showParameter), space) <>
         t.map(" :"<+> _).getOrElse("") <> t2.map(" :>"<+> _).getOrElse("") <+> "=" <+> e
   }
 
   implicit def showParameter(p: Parameter) : Doc = p match {
     case p: Pattern => showPattern(p)
-    case LabeledArg(l, None) => "~" <> l
-    case LabeledArg(l, Some(t)) => "~" <> l <+> ":" <+> t
-    case LabeledArgWithPattern(l, p) => "~" <> l <+> ":" <+> p
-    case OptionalLabeledArg(l, None, None, None) => "?" <> l
-    case OptionalLabeledArg(l, Some(p), None, None) => "?" <> l <+> ":" <+> p
-    case OptionalLabeledArg(l, None, t, e) => "?" <> parens(l <> 
+    case LabeledPar(l, None) => "~" <> l
+    case LabeledPar(l, Some(t)) => "~" <> l <+> ":" <+> t
+    case LabeledParWithPattern(l, p) => "~" <> l <+> ":" <+> p
+    case OptionalLabeledPar(l, None, None, None) => "?" <> l
+    case OptionalLabeledPar(l, Some(p), None, None) => "?" <> l <+> ":" <+> p
+    case OptionalLabeledPar(l, None, t, e) => "?" <> parens(l <> 
         t.map(" :"<+> _).getOrElse("") <> e.map(" ="<+> _).getOrElse("") )
-    case OptionalLabeledArg(l, Some(p), t, e) => "?" <> l <+> ":" <+> parens(p <> 
+    case OptionalLabeledPar(l, Some(p), t, e) => "?" <> l <+> ":" <+> parens(p <> 
         t.map(" :"<+> _).getOrElse("") <> e.map(" ="<+> _).getOrElse("") )
   }
 
@@ -95,7 +183,7 @@ object SyntaxPrettyPrinter extends PrettyPrinter {
     case InfixOp(a,o,b)       => parens(a <+> text(o) <+> b)
     case UnaryOp(o,a)         => parens(text(o) <+> a)
     case App(f,x)             => parens(f <+> x)
-    case App(f,x, xs@ _*)     => parens(f <+> x <+> catList(xs.map(showExpr), space))
+    case App(f,x, xs@ _*)     => parens(f <+> x <+> catList(xs.map(showArg), space))
     case Fun(args,e,None)     => parens("fun" <+> catList(args.map(showParameter), "") <+> "->" <+> e)
     case Fun(args,e,Some(g))  => parens("fun" <+> catList(args.map(showParameter), "") <+>
         "when"<+> g <+> "->" <+> e)
@@ -141,11 +229,18 @@ object SyntaxPrettyPrinter extends PrettyPrinter {
     case MethodCall(e, s)     => e <+> "#" <+> s
     case InstVar(s)           => value(s)
     case AssignInstVar(s, e)  => value(s) <+> "<-" <+> e
-    case Object(b)            => "object" <@> b <@> "end"
-
+    case Object(b)            => "object" <+> b <@> "end"
   }
 
-  implicit def showClassBody(b: ClassBody) : Doc = ""
+  
+  implicit def showArg(a: Argument) : Doc = a match {
+    case e : Expr => showExpr(e)
+    case LabeledArg(n, None) => "~" <> n
+    case LabeledArg(n, Some(e)) => "~" <> n <> ":" <> e
+    case OptionalLabeledArg(n, None) => "?" <> n
+    case OptionalLabeledArg(n, Some(e)) => "?" <> n <> ":" <> e
+  }
+
 
   implicit def showPatternMatching(b: PatternMatching) : Doc = b match {
     case Matching(p,e) => "|"<+> p <+> "->" <+> e

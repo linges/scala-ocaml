@@ -12,6 +12,12 @@ trait TestExamples extends FunSuite {
   implicit def tupleToRecordField(t: Tuple2[String, Type]) =
     ImmutableRecordField(t._1, t._2)
 
+  val int = TypeConstr("int")
+  val string = TypeConstr("string")
+
+  /**
+    * Expressions and Pattern
+    */
   test("int") {
     val result = OInt(2)
     val expect = "2"
@@ -201,16 +207,6 @@ trait TestExamples extends FunSuite {
     compare(result, expect)
   }
 
-  test("let and") {
-    val result = Let(
-      Binding(PVar("x"), OInt(7)),
-      Binding(PVar("r"), OInt(7)))
-    val expect = """
-    let x = 7 
-    and r = 7
-    """
-    compare(result, expect)
-  }
 
   test("nested let rec in") {
     val result = LetIn(List(Binding(PVar("x"), OInt(7))),
@@ -223,18 +219,6 @@ trait TestExamples extends FunSuite {
     compare(result, expect)
   }
 
-  test("record type with constraints") {
-    val result = TypeDefinition(TypeDef(List(), "point2d", None,
-      Some(TRecord("x" -> TypeConstr("float"), "y" -> TypeConstr("float"))),
-    List(TypeConstraint("a", TypeConstr("float")), TypeConstraint("x", TypeConstr("b")))))
-    val expect = """
-    type point2d = {x : float; y : float}
-    constraint 'a = float
-    constraint 'x = b
-    """
-    compare(result, expect)
-  }
- 
   test("record") {
     val result = Record(Map(Name("x") -> OFloat(3.0), Name("y") -> OFloat(-4.0)))
     val expect = """
@@ -274,16 +258,6 @@ trait TestExamples extends FunSuite {
     compare(result, expect)
   }
 
-  test("type with constructor and type-equation") {
-    val result = TypeDefinition(TypeDef(List(), "foobar",
-      Some(TypeConstr("int")), 
-      Some(ConstrDeclarations(ConstrDecl("Foo", TypeConstr("int"), TypeConstr("int")), 
-        ConstrDecl("Bar")))))
-    val expect = """
-    type foobar = int = | Foo of int * int | Bar  
-    """
-    compare(result, expect)
-  }
 
   test("match variant") {
     val result = Match("fb",
@@ -321,21 +295,6 @@ trait TestExamples extends FunSuite {
     compare(result, expect)
   }
 
-  test("mutable record type") {
-    val result = TypeDefinition(TypeDef(
-      List(TypeParameter("a",Some(Covariant))),
-      "r", None,
-      Some(
-      TRecord(MutableRecordField("sum", TypeConstr("float")),
-        MutableRecordField("samples", TypeConstr("int"))))))
-    val expect = """
-    type +'a r =
-    {mutable sum : float;
-      mutable samples : int}
-    """
-    compare(result, expect)
-  }
-
   test("unit as pattern") {
     val result = Let(FunBinding("create", List(Unit), Record(Map(Name("sum") -> OFloat(0.0)))))
     val expect = """let create () = {sum = 0.0}
@@ -353,19 +312,6 @@ trait TestExamples extends FunSuite {
     compare(result, expect)
   }
 
-  test("unit type") {
-    val result = TypeConstr("unit")
-    val expect = "unit"
-    compare(result, expect)
-  }
-
-  test("polymorphic type") {
-    val result = TypeDefinition(TypeDef( 
-      List(TypeParameter("a"), TypeParameter("b")), "ref", None,
-      Some(TRecord(MutableRecordField("contents", TypeIdent("a"))))))
-    val expect = """type ('a, 'b) ref = {mutable contents : 'a}"""
-    compare(result, expect)
-  }
 
   test("let rec") {
     val result = LetRec(FunBinding("f", List(PVar("x")), App("f", "x")))
@@ -376,11 +322,11 @@ trait TestExamples extends FunSuite {
   test("anonymous functions") {
     val result = Fun(List(
       PVar("x"),
-      LabeledArg("y"),
-      LabeledArgWithPattern("z", EmptyArray),
-      OptionalLabeledArg("l", None, Some(TypeConstr("option", TypeConstr("int"))), 
+      LabeledPar("y"),
+      LabeledParWithPattern("z", EmptyArray),
+      OptionalLabeledPar("l", None, Some(TypeConstr("option", TypeConstr("int"))), 
                            Some(Constr(Name("Some"), OInt(0)))),
-      OptionalLabeledArg("t", Some(OInt(0)), Some(TypeConstr("int")), Some(OInt(0)))),
+      OptionalLabeledPar("t", Some(OInt(0)), Some(TypeConstr("int")), Some(OInt(0)))),
       "x",
       Some("y"))
     val expect = """
@@ -446,8 +392,8 @@ trait TestExamples extends FunSuite {
 
   test("let labeled arguments") {
     val result = Let(FunBinding("ratio", List(
-      LabeledArg("num"),
-      LabeledArg("denom")), "num"))
+      LabeledPar("num"),
+      LabeledPar("denom")), "num"))
     val expect = """ 
     let ratio ~num ~denom = num 
     """
@@ -527,6 +473,55 @@ trait TestExamples extends FunSuite {
     val result = Alias(ArrayPattern(OInt(1),OInt(2)), "a")
     val expect = """ 
     [|1; 2|] as a
+    """
+    compare(result, expect)
+  }
+
+  test("labeled arguments application"){
+    val result = App("r",LabeledArg("num", Some(OInt(3))),
+      LabeledArg("denom"), OptionalLabeledArg("f"))
+    val expect = """ 
+    (r ~num:3 ~denom ?f)
+    """
+    compare(result, expect)
+  }
+
+
+  /**
+    * Types and Typedefinition
+    */
+  test("object type"){
+    val result = ObjectType(List("foo" -> TypeConstr("int"),
+                                 "bar" -> PolymorphType(List("a", "b"), TypeConstr("test"))) , true)
+    val expect = """ 
+    <foo : int; bar : 'a 'b . test ;..>
+    """
+    compare(result, expect)
+  }
+
+  test("exact variant type"){
+    val result = ExactVariantType(TagType("foo", Some(TypeConstr("a"))), TypeConstr("bar"))
+    val expect = """ 
+    [`foo of a | bar]
+    """
+    compare(result, expect)
+  }
+
+  test("open variant type"){
+    val result = OpenVariantType(TagType("foo", Some(TypeConstr("a"))), TypeConstr("bar"))
+    val expect = """ 
+    [>`foo of a | bar]
+    """
+    compare(result, expect)
+  }
+
+  test("close variant type"){
+    val result = CloseVariantType(List(
+      TagTypeFull("foo", Some(List(TypeConstr("a"),TypeConstr("b")))), TypeConstr("bar")),
+      Some(List("c", "d"))
+    )
+    val expect = """ 
+    [<`foo of a & b | bar > `c `d]
     """
     compare(result, expect)
   }
@@ -618,59 +613,218 @@ trait TestExamples extends FunSuite {
     compare(result, expect)
   }
 
-  test("object type"){
-    val result = ObjectType(List("foo" -> TypeConstr("int"),
-                                 "bar" -> PolymorphType(List("a", "b"), TypeConstr("test"))) , true)
+  test("record type with constraints") {
+    val result = TypeDefinition(TypeDef(List(), "point2d", None,
+      Some(TRecord("x" -> TypeConstr("float"), "y" -> TypeConstr("float"))),
+    List(TypeConstraint("a", TypeConstr("float")), TypeConstraint("x", TypeConstr("b")))))
+    val expect = """
+    type point2d = {x : float; y : float}
+    constraint 'a = float
+    constraint 'x = b
+    """
+    compare(result, expect)
+  }
+ 
+  test("type with constructor and type-equation") {
+    val result = TypeDefinition(TypeDef(List(), "foobar",
+      Some(TypeConstr("int")), 
+      Some(ConstrDeclarations(ConstrDecl("Foo", TypeConstr("int"), TypeConstr("int")), 
+        ConstrDecl("Bar")))))
+    val expect = """
+    type foobar = int = | Foo of int * int | Bar  
+    """
+    compare(result, expect)
+  }
+  test("mutable record type") {
+    val result = TypeDefinition(TypeDef(
+      List(TypeParameter("a",Some(Covariant))),
+      "r", None,
+      Some(
+      TRecord(MutableRecordField("sum", TypeConstr("float")),
+        MutableRecordField("samples", TypeConstr("int"))))))
+    val expect = """
+    type +'a r =
+    {mutable sum : float;
+      mutable samples : int}
+    """
+    compare(result, expect)
+  }
+  test("unit type") {
+    val result = TypeConstr("unit")
+    val expect = "unit"
+    compare(result, expect)
+  }
+
+  test("polymorphic type") {
+    val result = TypeDefinition(TypeDef( 
+      List(TypeParameter("a"), TypeParameter("b")), "ref", None,
+      Some(TRecord(MutableRecordField("contents", TypeIdent("a"))))))
+    val expect = """type ('a, 'b) ref = {mutable contents : 'a}"""
+    compare(result, expect)
+  }
+  /**
+    * Exceptions
+    */
+  test("exception definition"){
+    val result = NewException("Foo", TypeConstr("int"), TypeConstr("string"))
     val expect = """ 
-    <foo : int; bar : 'a 'b . test ;..>
+    exception Foo of int * string
     """
     compare(result, expect)
   }
 
-  test("exact variant type"){
-    val result = ExactVariantType(TagType("foo", Some(TypeConstr("a"))), TypeConstr("bar"))
+  test("alternate name for exception"){
+    val result = AlternateNameException("Bar", Name("Foo"))
     val expect = """ 
-    [`foo of a | bar]
+    exception Bar = Foo
+    """
+    compare(result, expect)
+  }
+  /**
+    * Classes
+    */
+
+
+  test("class type") {
+    val result = ClassType(List(),
+      NormalClassBodyType(Some(int),
+        ValSpec("a", int, true, true),
+        ValSpec("b", int, false, true),
+        ValSpec("c", int, false, false),
+        MethodSpec("d", int, true, true),
+        MethodSpec("e", int, false, true),
+        MethodSpec("f", int),
+        InheirtSpec(SimpleClassBodyType(List(),Name("foo"))),
+        ClassConstraint(int, int)
+      ))
+    val expect = """
+    object (int)
+      val mutable virtual a : int
+      val virtual b : int
+      val c : int
+      method private virtual d : int
+      method virtual e : int
+      method f : int
+      inherit foo
+      constraint int = int
+    end"""
+    compare(result, expect)
+  }
+
+  test("simple class type") {
+    val result = ClassType(List(
+      ClassTypeFunctionArg(int, Some("foo"), true),
+      ClassTypeFunctionArg(string)),
+      SimpleClassBodyType(List(int,string), Name("class")))
+    val expect = """ 
+    ?foo: int ->
+    string ->
+    [int, string] class
     """
     compare(result, expect)
   }
 
-  test("open variant type"){
-    val result = OpenVariantType(TagType("foo", Some(TypeConstr("a"))), TypeConstr("bar"))
-    val expect = """ 
-    [>`foo of a | bar]
+  test("simple class expression") {
+    val result = SimpleClassExpr(List(int, string), Name("Foo"))
+    val expect = """
+    [int, string] Foo
     """
     compare(result, expect)
   }
 
-  test("close variant type"){
-    val result = CloseVariantType(List(
-      TagTypeFull("foo", Some(List(TypeConstr("a"),TypeConstr("b")))), TypeConstr("bar")),
-      Some(List("c", "d"))
-    )
-    val expect = """ 
-    [<`foo of a & b | bar > `c `d]
+  test("class ascription") {
+    val result = ClassAscription(SimpleClassExpr(List(), Name("Foo")),
+      ClassType(List(),
+      SimpleClassBodyType(List(), Name("Foo"))) )
+    val expect = """
+    (Foo : Foo) 
+    """
+    compare(result, expect)
+  }
+
+  test("class fun and app") {
+    val foo = SimpleClassExpr(List(), Name("Foo"))
+    val result = ClassApp(
+      ClassFun(List(PVar("a"),PVar("b")), foo),
+      "x", "y")
+    val expect = """
+    ((fun a b -> Foo) x y)
+    """
+    compare(result, expect)
+  }
+
+  test("class let") {
+    val foo = SimpleClassExpr(List(), Name("Foo"))
+    val result = ClassLetIn(List(Binding(PVar("x"), OInt(7))), foo)
+    val expect = """
+    let x = 7
+    in Foo
+    """
+    compare(result, expect)
+  }
+
+  test("class let rec") {
+    val foo = SimpleClassExpr(List(), Name("Foo"))
+    val result = ClassLetRecIn(List(Binding(PVar("x"), OInt(7))), foo)
+    val expect = """
+    let rec x = 7
+    in Foo
+    """
+    compare(result, expect)
+  }
+
+  test("class object") {
+    val foo = SimpleClassExpr(List(), Name("Foo"))
+    val result = ClassObject(ClassBody(List(
+      Inherit(foo, Some("bar")),
+      Val("a", OInt(7), true, Some(int)),
+      Val("b", OInt(7)),
+      Val("c", OInt(7),false, Some(int)),
+      Method("d", List(PVar("a")), OInt(2), Some(int), true),
+      Method("e", List(), OInt(2), None , true),
+      Method("f", List(PVar("a")), OInt(2)),
+      PolyMethod("p", PolymorphType(List("a", "b"), TypeConstr("test")), OInt(2), true),
+      PolyMethod("p2", int, OInt(2)),
+      VirtualMethod("v", int, true),
+      VirtualMethod("v2", int)
+    ),
+      Some(PVar("x")), Some(int)
+    ))
+    val expect = """
+    object
+      (x : int)
+      inherit Foo as bar
+      val mutable a : int = 7
+      val b = 7
+      val c : int = 7
+      method private d a : int = 2
+      method private e = 2
+      method f a = 2
+      method private p : 'a 'b . test = 2
+      method p2 : int = 2
+      method private virtual v : int
+      method virtual v2 : int
+    end
+    """
+    compare(result, expect)
+  }
+
+
+  /**
+    * Toplevel
+    */
+
+  test("let and") {
+    val result = Let(
+      Binding(PVar("x"), OInt(7)),
+      Binding(PVar("r"), OInt(7)))
+    val expect = """
+    let x = 7 
+    and r = 7
     """
     compare(result, expect)
   }
   /*
-  test("labeled arguments application"){
-    val result = OInt(2)
-    val expect = """ 
-    ratio ~num:3 ~denom:10
-    """
-    compare(result, expect)
-  }
-
-  test("labeled arguments application with punning"){
-    val result = OInt(2)
-    val expect = """ 
-    let num = 3 in
-    let denom = 4 in
-    ratio ~num ~denom
-    """
-    compare(result, expect)
-  }
 
   test("let optional arguments"){
     val result = OInt(2)
@@ -687,15 +841,6 @@ trait TestExamples extends FunSuite {
     compare(result, expect)
   }
 
-  test("match list with literal"){
-    val result = OInt(2)
-    val expect = """ 
-    match l with
-    | [] -> 2
-    | 0  :: tl -> 5
-    """
-    compare(result, expect)
-  }
 
   */
 

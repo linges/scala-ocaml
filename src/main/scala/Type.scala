@@ -5,6 +5,17 @@ package scalaocaml
   * possibly preceded by one or several type parameters, 
   * and followed by an optional type equation, then an optional type representation, 
   * and then a constraint clause. The identifier is the name of the type constructor being defined.
+  * 
+  * The optional type equation = typexpr makes the defined type equivalent 
+  * to the type expression typexpr: one can be substituted for the other during typing. 
+  * If no type equation is given, a new type is generated: 
+  * the defined type is incompatible with any other type.
+  * 
+  * The optional type representation describes the data structure representing the defined type, 
+  * by giving the list of associated constructors (if it is a variant type) or associated fields 
+  * (if it is a record type). If no type representation is given, 
+  * nothing is assumed on the structure of the type besides what is 
+  * stated in the optional type equation.
   */
 case class TypeDef(tyvars: List[TypeParameter], constr: String, t: Option[Type] = None,
 trep: Option[TypeRepresentation], constraints: List[TypeConstraint] = List()) extends TopLevel
@@ -24,12 +35,29 @@ case object Contravariant extends Variance
 case class TypeConstraint(id: String, t: Type) 
 
 abstract class TypeRepresentation 
+/**
+  * The type representation = { field-decl  { ; field-decl }  [;] } 
+  * describes a record type. The field declarations field-decl1, …,  field-decln 
+  * describe the fields associated to this record type. 
+  */
 case class TRecord(m: RecordField*) extends TypeRepresentation
 abstract class RecordField
+/**
+  * The field declaration mutable field-name :  poly-typexpr behaves similarly; 
+  * in addition, it allows physical modification of this field
+  */
 case class MutableRecordField(s: String,e: PolyType) extends RecordField
+/**
+  * The field declaration field-name :  poly-typexpr declares field-name 
+  * as a field whose argument has type poly-typexpr. 
+  */
 case class ImmutableRecordField(s: String,e: PolyType) extends RecordField
 
-
+/**
+  * The type representation = [|] constr-decl  { | constr-decl } describes a variant type. 
+  * The constructor declarations constr-decl1, …,  constr-decln describe the constructors associated 
+  * to this variant type.
+  */
 case class ConstrDeclarations(v: ConstrDecl*) extends TypeRepresentation
 case class ConstrDecl(s: String, ts: Type*)
 
@@ -166,6 +194,6 @@ case class TagTypeFull(name: String, t: Option[List[Type]] = None) extends TagSp
 
 trait PolyType 
 /**
-  * { ' ident }+ .  typexpr  
+  * { ' ident }+ . typexpr  
   */
 case class PolymorphType(pvars: List[String], t: Type) extends PolyType 
