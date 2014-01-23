@@ -21,3 +21,21 @@ case object EmptyList extends Constant
 case object EmptyArray extends Constant 
 case object EmptyBeginEnd extends Constant
 case class TagName(s: String) extends Constant 
+
+trait ConstantPrettyPrinter {
+  self: OCamlPrettyPrinter =>
+
+  implicit def showConstant(c: Constant) : Doc = c match {
+    case OInt(v)       => value(v)
+    case OFloat(v)     => value(v)
+    case OChar(c)      => "'" <> value(c) <> "'"
+    case OString(s)    => '"' <> string(s) <> '"'
+    case TagName(s)    => "`" <> s
+    case True          => "true"
+    case False         => "false"
+    case Unit          => "()"
+    case EmptyList     => "[]"
+    case EmptyArray    => "[||]"
+    case EmptyBeginEnd => "begin end"
+  }
+}

@@ -1,5 +1,14 @@
 package scalaocaml
 
+
+/**
+  * Type definitions are introduced by the type keyword, 
+  * and consist in one or several simple definitions, 
+  * possibly mutually recursive, separated by the and keyword. 
+  * Each simple definition defines one type constructor.
+  */
+case class TypeDefinition(td: TypeDef*) extends Definition with Specification
+
 /**
   * A simple definition consists in a lowercase identifier, 
   * possibly preceded by one or several type parameters, 
@@ -18,7 +27,7 @@ package scalaocaml
   * stated in the optional type equation.
   */
 case class TypeDef(tyvars: List[TypeParameter], constr: String, t: Option[Type] = None,
-trep: Option[TypeRepresentation], constraints: List[TypeConstraint] = List()) extends TopLevel
+trep: Option[TypeRepresentation], constraints: List[TypeConstraint] = List()) 
 
 /**
   * The optional type parameters are either one type variable ' ident, 
@@ -197,3 +206,107 @@ trait PolyType
   * { ' ident }+ . typexpr  
   */
 case class PolymorphType(pvars: List[String], t: Type) extends PolyType 
+
+/**
+  * Exception definitions add new constructors to the built-in
+  * variant type exn of exception values. The constructors are declared 
+  * as for a definition of a variant type.
+  * 
+  * The form exception constr-name  [of typexpr  {* typexpr}] generates a new exception, 
+  * distinct from all other exceptions in the system. 
+  * The form exception constr-name =  constr gives an alternate 
+  * name to an existing exception. 
+  */
+abstract class OException extends Definition
+case class NewException(name: String, ts: Type*) extends OException
+case class AlternateNameException(name : String, constr: Name) extends OException
+
+trait TypePrettyPrinter {
+  self: OCamlPrettyPrinter =>
+
+  implicit def showType(e: Type) : Doc = e match {
+    case TypeConstr(v)         => value(v)
+    case TypeConstr(v, t)      => t <+> value(v)
+    case TypeConstr(v, ts @ _*)  => list(ts.toList, "", showType) <+> value(v)
+    case TypeIdent(v) => "'" <> value(v)
+    case TUnderscore => "_"
+    case FunctionType(t1,t2) => parens(t1 <+> "->" <+> t2)
+    case LabeledFunctionType(l, t1, t2, false) =>  parens(value(l) <> ":" <+> t1 <+> "->" <+> t2)
+    case LabeledFunctionType(l, t1, t2, true) =>  parens("?" <> value(l) <> ":" <+> t1 <+> "->" <+> t2)
+    case TupleType(ts@ _*) =>   parens(catList(ts.map(showType), " * "))
+    case TypeAlias(t, as) => parens(t <+> "as '" <> value(as))
+    case HashType(n) => parens("#" <+> n)
+    case HashType(n, t) => parens(t <+> "#" <+> n)
+    case HashType(n, ts@ _*) => parens(list(ts.toList, "", showType) <+> "#" <+> n)
+    case ObjectType(m, b) => enclose("<", catList(m.map{case (s,t) => s <+> ":" <+> t}, semi)
+        <> (if(b) " ;.." else ""), ">")
+    case ExactVariantType(ts@ _*) => brackets(catList(ts.map(showTagSpec), " |")) 
+    case OpenVariantType(ts@ _*) => brackets(">" <> catList(ts.map(showTagSpec), " |")) 
+    case CloseVariantType(ts, None) => brackets("<" <> catList(ts.map(showTagSpecFull), " |")) 
+    case CloseVariantType(ts, Some(ls)) => brackets("<" <> catList(ts.map(showTagSpecFull), " |")
+      <+> ">" <+> catList(ls.map{case s => "`" <> value(s)}, ""))
+  }
+
+  implicit def showPolyType(p : PolyType) : Doc = p match {
+    case PolymorphType(ps, t) =>  catList(ps.map(s => "'" <> s), "") <+> dot <+> t 
+    case t: Type => showType(t)
+  }
+
+  implicit def showTagSpec(t: TagSpec) : Doc = t match {
+    case TagType(n, None) => "`" <> value(n)
+    case TagType(n, Some(t)) => "`" <> value(n) <+> "of" <+> t
+    case t : Type => showType(t)
+  }
+
+  implicit def showTagSpecFull(t: TagSpecFull) : Doc = t match {
+    case TagTypeFull(n, None) => "`" <> value(n)
+    case TagTypeFull(n, Some(t)) => "`" <> value(n) <+> "of" <+> catList(t.map(showType), " &")
+    case t : Type => showType(t)
+  }
+
+  implicit def showTypeDef(e: TypeDef) : Doc = e match {
+    case TypeDef(tvars, constr, t, tr, cs) => {
+      showTypeParameters(tvars) <+> constr <>
+      t.map(" =" <+> showType(_)).getOrElse("") <>
+      tr.map(" =" <+> showTypeRepresentation(_)).getOrElse("") <@>
+      lsep(cs.map(showTypeConstraint), linebreak)
+    }
+  }
+ 
+  def showTypeConstraint(cs: TypeConstraint) : Doc = cs match {
+    case TypeConstraint(id, t) => "constraint '" <> id <+> "=" <+> t 
+  }
+
+  def showTypeRepresentation(tr: TypeRepresentation) : Doc = tr match {
+    case TRecord(m@ _*)  => enclose("{",  catList(m.map(showRecordField), semi)
+        ,"}")
+    case ConstrDeclarations(l@ _*) => "|" <+> lsep(l.map(showConstrDecl), line <> "|" )
+  }
+
+  def showConstrDecl(cd: ConstrDecl) : Doc = cd match {
+    case ConstrDecl(s) => value(s)
+    case ConstrDecl(s, ts@ _*) => value(s) <+> "of" <+> catList(ts.map(showType), " *")
+  }
+
+  implicit def showRecordField(rf: RecordField) : Doc = rf match {
+    case ImmutableRecordField(s, t) => s <+> ":" <+> t
+    case MutableRecordField(s, t) => "mutable" <+> s <+> ":" <+> t
+  }
+
+  def showTypeParameters(ts: List[TypeParameter]) : Doc = 
+    if(ts.isEmpty) ""
+    else if(ts.size == 1) showTypeParameter(ts(0))
+    else list(ts.toList, "", showTypeParameter)
+
+  def showTypeParameter(tp: TypeParameter) : Doc = tp match {
+    case TypeParameter(id, Some(Covariant)) => "+" <> "'" <> id
+    case TypeParameter(id, Some(Contravariant)) => "-" <> "'" <> id
+    case TypeParameter(id, None) => "'" <> id
+  }
+
+  def showException(e: OException) : Doc = e match {
+    case NewException(name) => "exception" <+> name
+    case NewException(name, ts@ _*) => "exception" <+> name <+> "of" <+> catList(ts.map(showType), " *")
+    case AlternateNameException(name , constr) => "exception" <+> name <+> "=" <+> constr
+  }
+}

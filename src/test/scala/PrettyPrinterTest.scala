@@ -8,11 +8,11 @@ class PrettyPrinterTest extends FunSuite with TestExamples
 {
 
   def compare(result: Any, expect: String) = {
-    val a = cleanString(SyntaxPrettyPrinter.pretty(result))
+    val a = cleanString(OCamlPrettyPrinter.pretty(result))
     val b = cleanString(expect)
     if(a != b){
         println(a + " \n" + b)
-        println(SyntaxPrettyPrinter.pretty(result))
+        println(OCamlPrettyPrinter.pretty(result))
     }
     assert(a == b)
   }

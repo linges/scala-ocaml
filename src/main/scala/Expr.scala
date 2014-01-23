@@ -1,6 +1,16 @@
 package scalaocaml
 
-trait Expr extends Argument
+
+
+/**
+  * A value definition let [rec] let-binding  { and let-binding } bind 
+  * value names in the same way as a let … in … expression.
+  */
+case class Let(lb: LetBinding*) extends Definition
+case class LetRec(lb: LetBinding*) extends Definition  
+
+
+trait Expr extends Argument with ModuleItem
 
 /**
   * An expression consisting in an access path evaluates
@@ -126,7 +136,7 @@ case class OList(val l: Expr*) extends Expr
   * The expression `tag-name  expr evaluates to the polymorphic variant value
   * whose tag is tag-name, and whose argument is the value of expr.
   */
-case class TaggedExpr(s: String, e: Expr) extends Expr //TODO
+case class TaggedExpr(s: String, e: Expr) extends Expr 
 
 /**
   * The expression { field1 =  expr1 ; … ;  fieldn =  exprn } evaluates to the record value
@@ -213,7 +223,7 @@ case class InfixOp(a: Expr, op: String, b: Expr) extends Expr
   * The expression (expr :>  typexpr) coerces the expression expr to type typexpr. 
   * The expression (expr :  typexpr1 :>  typexpr2) coerces the expression expr from type typexpr1 to type typexpr2.
   */
-case class Coercion(e: Expr, t1: Option[Type], t2: Type) extends Expr //TODO  (expr :  typexpr1 :>  typexpr2)
+case class Coercion(e: Expr, t1: Option[Type], t2: Type) extends Expr
 
 
 /**
@@ -281,7 +291,7 @@ case class SelfCopy(update: Map[String, Expr]) extends Expr
   * to defining locally a class class-name = object class-body end 
   * and immediately creating a single object from it by new class-name.
   */
-case class Object(body: ClassBody) extends Expr  //TODO test
+case class Object(body: ClassBody) extends Expr 
 
 trait Argument 
 case class LabeledArg(name: String, e: Option[Expr] = None) extends Argument
@@ -291,3 +301,77 @@ sealed abstract class LetBinding
 case class Binding(p: Pattern, e: Expr) extends LetBinding
 case class FunBinding(name : String, args: List[Parameter], e: Expr, t: Option[Type] = None, t2: Option[Type] = None) extends LetBinding 
 
+trait ExprPrettyPrinter {
+  self: OCamlPrettyPrinter =>
+
+  implicit def showExpr(e: Expr) : Doc = e match {
+    case c: Constant          => showConstant(c)
+    case InfixOp(a,o,b)       => parens(a <+> text(o) <+> b)
+    case UnaryOp(o,a)         => parens(text(o) <+> a)
+    case App(f,x)             => parens(f <+> x)
+    case App(f,x, xs@ _*)     => parens(f <+> x <+> catList(xs.map(showArg), space))
+    case Fun(args,e,None)     => parens("fun" <+> catList(args.map(showParameter), "") <+> "->" <+> e)
+    case Fun(args,e,Some(g))  => parens("fun" <+> catList(args.map(showParameter), "") <+>
+        "when"<+> g <+> "->" <+> e)
+    case Function(ps@ _*)     => "function" <+> lsep(ps.map(showPatternMatching), line)
+    case Var(v)               => v
+    case OList(l@ _*)         => brackets( catList(l.map(showExpr), semi) )
+    case IfThenElse(c, t, e)  => "if" <+> showExpr(c) <+> "then" <>
+      nest(line <> showExpr(t)) <@> "else" <> nest(line <> showExpr(e))
+    case IfThen(c, t)         => "if" <+> showExpr(c) <+> "then" <>
+      nest(line <> showExpr(t))
+    case LetIn(v, e)          => group("let" <+> lsep(v.map(showLetBinding), line <>"and") <@> "in" <> nest(line <> e))
+    case LetRecIn(v, e)       => group("let rec" <+> lsep(v.map(showLetBinding), line <>"and") <@> "in" <> nest(line <> e))
+    case Tuple(l@ _*)         => list(l.toList, "", showExpr)
+    case Constr(n)            => n
+    case Constr(n, l@ _*)     => n <> list(l.toList, "", showExpr)
+    case Match(e, bs@ _*)     => "match" <+> e <+> "with" <>
+      nest(line <> bs.map(showPatternMatching).reduce(_ <@> _))
+    case Try(e, bs@ _*)       => "try" <+> e <+> "with" <>
+      nest(line <> bs.map(showPatternMatching).reduce(_ <@> _))
+    case Record(m)            => enclose("{",  catList(m.map{
+      case (s,t)              => s <+> "=" <+> t }.toList, semi)
+        ,"}")
+    case RecordCopy(e,m)      => enclose("{", e <+> "with" <+>
+        catList(m.map{
+          case (s,t)          => s <+> "=" <+> t }.toList, semi)
+        ,"}")
+    case RecordAccess(e,s)    => e <> dot <> s 
+    case RecordUpdate(r,s,e)  => r <> dot <> s <+> "<-" <+> e
+    case ForTo(i,from,to,e)   => "for" <+> i <+> "=" <+> from <+> "to" <+> to <+> "do" <>
+      nest(line <> e) <@> "done"
+    case ForDown(i,from,to,e) => "for" <+> i <+> "=" <+> from <+> "downto" <+> to <+> "do" <>
+      nest(line <> e) <@> "done"
+    case While(e,b)           => "while" <+> e <+> "do" <> nest(line <> b) <@> "done"
+    case Sequence(l@ _*)      => parens(catList(l.map(showExpr), semi))
+    case Ascription(e,t)      => parens(e<+>":"<+>t)
+    case Array(l@ _*)         => enclose("[|", catList(l.map(showExpr), semi), "|]")
+    case ArrayAccess(a,e)     => a <> dot <> parens(e) 
+    case ArrayUpdate(a,i,e)   => a <> dot <> parens(i) <+> "<-" <+> e
+    case New(n)               => "new" <+> n
+    case CharOf(s,i)          => s <> dot <> brackets(i)
+    case UpdateString(s,i,c)  => s <> dot <> brackets(i) <+> "<-" <+> c
+    case BeginEnd(e)          => "begin" <@> e <@> "end"
+    case MethodCall(e, s)     => e <+> "#" <+> s
+    case InstVar(s)           => value(s)
+    case AssignInstVar(s, e)  => value(s) <+> "<-" <+> e
+    case Object(b)            => "object" <+> b <@> "end"
+    case TaggedExpr(name, e)  => parens("`" <> name <+> e)
+    case Coercion(n, None, t2) => parens(n <+> ":>" <+> t2)
+    case Coercion(n, Some(t), t2) => parens(n <+> ":" <+> t <+> ":>" <+> t2)
+  }
+
+  implicit def showArg(a: Argument) : Doc = a match {
+    case e : Expr => showExpr(e)
+    case LabeledArg(n, None) => "~" <> n
+    case LabeledArg(n, Some(e)) => "~" <> n <> ":" <> e
+    case OptionalLabeledArg(n, None) => "?" <> n
+    case OptionalLabeledArg(n, Some(e)) => "?" <> n <> ":" <> e
+  }
+
+  implicit def showLetBinding(lb: LetBinding) : Doc = lb match {
+    case Binding(p,e)               => p <+> "=" <+> e
+    case FunBinding(n, l, e, t, t2) => n <+> catList(l.map(showParameter), space) <>
+        t.map(" :"<+> _).getOrElse("") <> t2.map(" :>"<+> _).getOrElse("") <+> "=" <+> e
+  }
+}

@@ -14,6 +14,7 @@ trait TestExamples extends FunSuite {
 
   val int = TypeConstr("int")
   val string = TypeConstr("string")
+  val mt = MTVar(ExtendedName("mt"))
 
   /**
     * Expressions and Pattern
@@ -484,6 +485,22 @@ trait TestExamples extends FunSuite {
     (r ~num:3 ~denom ?f)
     """
     compare(result, expect)
+  } 
+
+  test("tagged expr"){
+    val result = TaggedExpr("foo", OInt(7))
+    val expect = """ 
+    (`foo 7)
+    """
+    compare(result, expect)
+  }
+
+  test("coercion"){
+    val result = Coercion(Coercion("f", Some(int), int), None, int) 
+    val expect = """ 
+    ((f : int :> int) :> int)
+    """
+    compare(result, expect)
   }
 
 
@@ -527,7 +544,7 @@ trait TestExamples extends FunSuite {
   }
 
   test("Typeconstr pattern") {
-    val result = PTypeconstr(Name("foo")) 
+    val result = PTypeconstr(ExtendedName("foo")) 
     val expect = """ 
     #foo
     """
@@ -694,7 +711,7 @@ trait TestExamples extends FunSuite {
         MethodSpec("d", int, true, true),
         MethodSpec("e", int, false, true),
         MethodSpec("f", int),
-        InheirtSpec(SimpleClassBodyType(List(),Name("foo"))),
+        InheirtSpec(SimpleClassBodyType(List(),ExtendedName("foo"))),
         ClassConstraint(int, int)
       ))
     val expect = """
@@ -715,7 +732,7 @@ trait TestExamples extends FunSuite {
     val result = ClassType(List(
       ClassTypeFunctionArg(int, Some("foo"), true),
       ClassTypeFunctionArg(string)),
-      SimpleClassBodyType(List(int,string), Name("class")))
+      SimpleClassBodyType(List(int,string), ExtendedName("class")))
     val expect = """ 
     ?foo: int ->
     string ->
@@ -735,7 +752,7 @@ trait TestExamples extends FunSuite {
   test("class ascription") {
     val result = ClassAscription(SimpleClassExpr(List(), Name("Foo")),
       ClassType(List(),
-      SimpleClassBodyType(List(), Name("Foo"))) )
+      SimpleClassBodyType(List(), ExtendedName("Foo"))) )
     val expect = """
     (Foo : Foo) 
     """
@@ -809,9 +826,73 @@ trait TestExamples extends FunSuite {
     compare(result, expect)
   }
 
+  /**
+    * Module types
+    */
+
+  test("functor type") {
+    val result = FunctorType("foo", mt, mt)
+    val expect = """
+    functor (foo : mt) -> mt
+    """
+    compare(result, expect)
+  }
+
+  test("module type with") {
+    val result = MTWith(mt,
+      MTTypeConstraint(List(TypeParameter("a", Some(Covariant))), ExtendedName("foo"), int),
+      MTModuleConstraint(Name("bar"), ExtendedModulePath(ExtendedModuleName("test")))
+    )
+    val expect = """
+    mt with type +'a foo = int and
+    module bar = test
+    """
+    compare(result, expect)
+  }
+
+  test("module sig") {
+    val result = Signatur(
+      SVal("foo", int),
+      SException(ConstrDecl("ex")),
+      ModuleSpecification("bar", List(), mt),
+      ModuleSpecification("bar2", List(("a",mt), ("b", mt)), mt),
+      ModuleTypeSpecification("t"),
+      ModuleTypeSpecification("t2", Some(mt)),
+      Include(mt),
+      Open(Name("tt")),
+      ClassSpecification(
+        ClassSpec("cl", ClassType(List(), NormalClassBodyType(None)),
+          true, List("b", "c")),
+        ClassSpec("cl2", ClassType(List(), NormalClassBodyType(None)))
+      ),
+      ClassTypeDefinition(
+        ClassTypeDef("cl",  NormalClassBodyType(None),
+          true, List("b", "c")),
+        ClassTypeDef("cl2",  NormalClassBodyType(None))
+      )
+      
+    )
+    val expect = """
+    sig
+      val foo : int;;
+      exception ex;;
+      module bar : mt;;
+      module bar2(a : mt) (b : mt) : mt;;
+      module type t;;
+      module type t2 = mt;;
+      include mt;;
+      open tt;;
+      class virtual ['b 'c] cl : object end 
+        and cl2 : object end;;
+      class type virtual ['b 'c] cl : object end 
+        and cl2 : object end
+    end
+    """
+    compare(result, expect)
+  }
 
   /**
-    * Toplevel
+    * Module expression
     */
 
   test("let and") {
@@ -824,24 +905,63 @@ trait TestExamples extends FunSuite {
     """
     compare(result, expect)
   }
-  /*
 
-  test("let optional arguments"){
-    val result = OInt(2)
-    val expect = """ 
-    let concat ?sep x y = sep
+  test("functor") {
+    val result = FunctorApp(Functor("f", mt, MEAscription(MVar(Name("x")), mt)), MVar(Name("y")))
+    val expect = """
+    functor (f : mt) -> (x : mt) (y)
     """
     compare(result, expect)
   }
 
-  test("let optional arguments with default"){
-    val result = OInt(2)
-    val expect = """ let concat ?(sep="") x y = x ^ sep ^ y 
+  test("struct") {
+    val result = Struct(
+      ModuleTypeDef("foo", mt),
+      ModuleDefinition("bar", MVar(Name("n")), List("a" -> mt, "b" -> mt), Some(mt)),
+      ModuleDefinition("bar", MVar(Name("n")), List("a" -> mt)),
+      ModuleDefinition("bar", MVar(Name("n")) ),
+      ModuleDefinition("bar", MVar(Name("n")), List(), Some(mt)),
+      OInt(7),
+      ClassDefinition(ClassBinding("c", List(), SimpleClassExpr(List(), Name("cc")),
+        true, List("a"), Some(ClassType(List(), SimpleClassBodyType(List(), ExtendedName("ct")))))),
+      ClassDefinition(ClassBinding("c", List(), SimpleClassExpr(List(), Name("cc")),
+        false, List(), None))
+    )
+    val expect = """
+    struct
+      module type foo = mt;;
+      module bar(a : mt) (b : mt) : mt = n;;
+      module bar(a : mt) = n;;
+      module bar = n;;
+      module bar : mt = n;;
+      7;;
+      class virtual ['a] c : ct = cc;;
+      class c = cc
+    end
     """
     compare(result, expect)
   }
 
+  /**
+    * Names
+    */
 
-  */
-
+  test("extended name") {
+    val result = ExtendedName("name", List(
+      ExtendedModulePath(ExtendedModuleName("a", List(
+        ExtendedModulePath(ExtendedModuleName("aa", List(
+          ExtendedModulePath(ExtendedModuleName("aaa")))
+        )),
+        ExtendedModulePath(ExtendedModuleName("b"))
+       )
+      )),
+      ExtendedModulePath(ExtendedModuleName("c", List(
+        ExtendedModulePath(ExtendedModuleName("f"), List(ExtendedModuleName("d")))
+      )))
+    ))
+    val expect = """
+    a (aa (aaa)) (b). c (d.f). name
+    """
+    compare(result, expect)
+  }
 }

@@ -32,7 +32,7 @@ case class OrPattern(a: Pattern, b: Pattern) extends Pattern
   * The pattern constr (  pattern1 , … ,  patternn ) matches all variants whose constructor is equal to constr, 
   * and whose arguments match pattern1 …  patternn. 
   * It is a type error if n is not the number of arguments expected by the constructor.
-  * The pattern constr _ matches all variants whose constructor is constr. //TODO test
+  * The pattern constr _ matches all variants whose constructor is constr.
   */
 case class ConstrPattern(constr: Name, p: Pattern*) extends Pattern
 
@@ -78,7 +78,7 @@ case class ArrayPattern(ps: Pattern*) extends Pattern
   * ( `tag-name1(_ :  typexpr1) | … | ` tag-namen(_ :  typexprn)). 
   * It matches all values of type [< typeconstr ].
   */
-case class PTypeconstr(name: Name) extends Pattern
+case class PTypeconstr(name: ExtendedName) extends Pattern
 
 trait PatternMatching 
 case class MatchingWithGuard(p: Pattern, g: Expr, e: Expr) extends PatternMatching
@@ -88,3 +88,45 @@ trait Parameter
 case class LabeledPar(label: String, t:Option[Type] = None) extends Parameter
 case class LabeledParWithPattern(label: String, p: Pattern) extends Parameter
 case class OptionalLabeledPar(label: String, p: Option[Pattern] = None, t: Option[Type] = None, default : Option[Expr] = None) extends Parameter
+
+
+trait PatternPrettyPrinter {
+  self : OCamlPrettyPrinter =>
+
+  implicit def showParameter(p: Parameter) : Doc = p match {
+    case p: Pattern => showPattern(p)
+    case LabeledPar(l, None) => "~" <> l
+    case LabeledPar(l, Some(t)) => "~" <> l <+> ":" <+> t
+    case LabeledParWithPattern(l, p) => "~" <> l <+> ":" <+> p
+    case OptionalLabeledPar(l, None, None, None) => "?" <> l
+    case OptionalLabeledPar(l, Some(p), None, None) => "?" <> l <+> ":" <+> p
+    case OptionalLabeledPar(l, None, t, e) => "?" <> parens(l <> 
+        t.map(" :"<+> _).getOrElse("") <> e.map(" ="<+> _).getOrElse("") )
+    case OptionalLabeledPar(l, Some(p), t, e) => "?" <> l <+> ":" <+> parens(p <> 
+        t.map(" :"<+> _).getOrElse("") <> e.map(" ="<+> _).getOrElse("") )
+  }
+
+  implicit def showPatternMatching(b: PatternMatching) : Doc = b match {
+    case Matching(p,e) => "|"<+> p <+> "->" <+> e
+    case MatchingWithGuard(p,g,e) => "|"<+> p <+>"when" <+> g <+> "->" <+> e
+  }
+
+  implicit def showPattern(e: Pattern) : Doc = e match {
+    case c: Constant => showConstant(c)
+    case PVar(v) => value(v)
+    case PTuple(l@ _*) => list(l.toList, "", showPattern)
+    case PList(l@ _*) => if (l.isEmpty) "[]" else list(l.toList, "", showPattern, space<>"::")
+    case PRecord(m) => enclose("{",  catList(m.map{
+      case (s,t) => s <+> "=" <+> t }.toList, semi)
+        ,"}")
+    case RecordPunning(m@ _*) => enclose("{", catList(m.map(showIdentifier), semi) ,"}")
+    case ConstrPattern(n) => n
+    case ConstrPattern(n, p@ _*) => n <> parens(catList(p.map(showPattern),comma))
+    case OrPattern(a,b) => a <+> "|" <+> b
+    case FixSizeList(l) => brackets( catList(l.map(showPattern), semi) )
+    case ArrayPattern(l@ _*)         => enclose("[|", catList(l.map(showPattern), semi), "|]")
+    case Alias(p,n) => p <+> "as" <+> n
+    case PTypeconstr(n) => "#" <> n
+    case Underscore => "_"
+  }
+}
