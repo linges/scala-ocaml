@@ -1,5 +1,11 @@
 package scalaocaml
 
+import scala.util.parsing.combinator.Parsers
+import scala.util.parsing.combinator.RegexParsers
+import scala.util.parsing.combinator.Parsers
+import scala.util.matching.Regex
+import scala.language.postfixOps
+import scala.language.implicitConversions
 
 
 /**
@@ -172,7 +178,7 @@ case class RecordUpdate(r: Expr, s: Name, e: Expr) extends Expr
   * The expression [| expr1 ; … ;  exprn |] evaluates to a n-element array, 
   * whose elements are initialized with the values of expr1 to exprn respectively.
   */
-case class Array(l: Expr*) extends Expr
+case class OArray(l: Expr*) extends Expr
 
 /**
   * The expression expr1 .( expr2 ) returns the value of element
@@ -345,7 +351,7 @@ trait ExprPrettyPrinter {
     case While(e,b)           => "while" <+> e <+> "do" <> nest(line <> b) <@> "done"
     case Sequence(l@ _*)      => parens(catList(l.map(showExpr), semi))
     case Ascription(e,t)      => parens(e<+>":"<+>t)
-    case Array(l@ _*)         => enclose("[|", catList(l.map(showExpr), semi), "|]")
+    case OArray(l@ _*)         => enclose("[|", catList(l.map(showExpr), semi), "|]")
     case ArrayAccess(a,e)     => a <> dot <> parens(e) 
     case ArrayUpdate(a,i,e)   => a <> dot <> parens(i) <+> "<-" <+> e
     case New(n)               => "new" <+> n
@@ -374,4 +380,10 @@ trait ExprPrettyPrinter {
     case FunBinding(n, l, e, t, t2) => n <+> catList(l.map(showParameter), space) <>
         t.map(" :"<+> _).getOrElse("") <> t2.map(" :>"<+> _).getOrElse("") <+> "=" <+> e
   }
+}
+trait ExprParser extends RegexParsers with Parsers {
+  self: OCamlParser =>
+
+  def expr: Parser[Expr] = constant 
+
 }

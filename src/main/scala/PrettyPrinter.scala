@@ -26,6 +26,5 @@ trait OCamlPrettyPrinter extends PrettyPrinter with ExprPrettyPrinter
     case e => pretty_any(e)
   }
 
-
   def catList(l: Seq[Doc], sep: Doc): Doc = (group(lsep(l.toList, sep)))
 }
