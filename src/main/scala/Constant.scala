@@ -68,5 +68,4 @@ trait ConstantParser extends RegexParsers with Parsers {
   private def emptyarray: Parser[EmptyArray.type] = """\[\|\|\]""".r ^^ { _ => EmptyArray }
   private def emptybeginend: Parser[EmptyBeginEnd.type] = """begin end""".r ^^ { _ => EmptyBeginEnd }
   private def tagname: Parser[TagName] = """`""".r ~ capitalizedident ^^ { case _ ~ s => TagName(s) }
-  private def capitalizedident: Parser[String] = """[A-Z][a-zA-Z0-9]*""".r ^^ { case s: String => s }
 }

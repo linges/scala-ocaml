@@ -1,5 +1,7 @@
 package scalaocaml
 
+import scala.collection.mutable.Stack
+import scala.collection.mutable.Queue
 import scala.util.parsing.combinator.Parsers
 import scala.util.parsing.combinator.RegexParsers
 import scala.util.parsing.combinator.Parsers
@@ -381,9 +383,177 @@ trait ExprPrettyPrinter {
         t.map(" :"<+> _).getOrElse("") <> t2.map(" :>"<+> _).getOrElse("") <+> "=" <+> e
   }
 }
+
 trait ExprParser extends RegexParsers with Parsers {
   self: OCamlParser =>
 
-  def expr: Parser[Expr] = constant 
 
+
+  def simpleexpr: Parser[Expr] = list | constant | record | vari | array | forto  | fordown | whiledone
+
+  def forto: Parser[Expr] = ("for" ~> ident <~ "=") ~ (expr <~ "to") ~ 
+                            (expr <~ "do") ~ expr <~ "done" ^^
+                            { case v~f~t~d => ForTo(v,f,t,d) }
+  def fordown: Parser[Expr] = ("for" ~> ident <~ "=") ~ (expr <~ "downto") ~ 
+                              (expr <~ "do") ~ expr <~ "done" ^^
+                              { case v~f~t~d => ForDown(v,f,t,d) }
+  def whiledone: Parser[Expr] = ("while" ~> expr <~ "do") ~ expr <~ "done" ^^ 
+                                { case e~d => While(e,d) }
+
+  def vari: Parser[Expr] = name ^^ {Var(_)}
+  def record: Parser[Expr] = "{" ~> rep1sep(recordField, ";") <~ "}" ^^
+                              { case l : List[(Name,Expr)] => Record(l.toMap) }
+
+  def recordField: Parser[(Name, Expr)] = (name <~ "=") ~ expr ^^ { case n~e => (n,e) }
+
+  def array: Parser[Expr] = "[|" ~> rep1sep(exprLvl(2), ";") <~ (";" ?) <~ "|]" ^^
+                            { case l => OArray(l:_*) }
+  def list: Parser[Expr] = "[" ~> rep1sep(exprLvl(2), ";") <~ (";" ?) <~ "]" ^^
+                            { case l => OList(l:_*) }
+
+  def ifthenelse(p:Int): Parser[Expr] = ("if" ~> expr <~ "then") ~ (expr <~ "else") ~ exprLvl(p) ^^
+                                 { case c ~ t ~ e => IfThenElse(c,t,e) }
+
+  def ifthen(p:Int): Parser[Expr] = ("if" ~> expr <~ "then")  ~ exprLvl(p) ^^
+                                 { case c ~ t => IfThen(c,t) }
+
+  def tuple(p:Int): Parser[Expr] = (exprLvl(p) <~ ",") ~ repsep(exprLvl(p), ",")  ^^
+                             { case e~l => Tuple(e::l:_*) } 
+
+
+
+  def recorddot1(e:Expr): Parser[Expr] = ((("." ~> name ) into { i:Name => recorddot2(e,i) }) into selection) | success(e)
+  def recorddot2(a: Expr, i: Name): Parser[Expr] = "<-" ~> exprLvl(3) ^^ {case e => RecordUpdate(a,i,e) } | 
+                                               success(RecordAccess(a,i))
+
+  def arraydot1(e: Expr): Parser[Expr] = ((("."~"(" ~> expr <~ ")") into { i:Expr => arraydot2(e,i) }) into selection) | success(e)
+  def arraydot2(a: Expr, i: Expr): Parser[Expr] = "<-" ~> exprLvl(3) ^^ {case e => ArrayUpdate(a,i,e) } | 
+                                               success(ArrayAccess(a,i))
+
+
+  def parentheses: Parser[Expr] = "(" ~> expr <~ ")"
+  def sequence(p: Int): Parser[Expr] = (exprLvl(p) <~ ";")  ~ repsep(exprLvl(p), ";") ^^ { case e~l => Sequence(e::l:_*) }
+
+  def letin(p:Int): Parser[LetIn] = ("let" ~> rep1sep(letbinding, "and") <~ "in") ~ exprLvl(p) ^^
+                             { case l~e => LetIn(l,e) }
+  def letrecin(p:Int): Parser[LetRecIn] = ("let" ~> "rec" ~> rep1sep(letbinding, "and") <~ "in") ~ exprLvl(p) ^^
+                             { case l~e => LetRecIn(l,e) }
+  def let: Parser[Let] = ("let" ~> rep1sep(letbinding, "and") ) ^^
+                             { case l => Let(l:_*) }
+  def letrec: Parser[LetRec] = ("let" ~> "rec" ~> rep1sep(letbinding, "and"))  ^^
+                             { case l => LetRec(l:_*) }
+
+  def app(p:Int): Parser[Expr] = exprLvl(p) ~ rep(exprLvl(p)) ^^ { case f ~ l => if (l.isEmpty) f else App(f, l.head, l.tail :_*)}
+
+  def selection(e:Expr) : Parser[Expr] = (arraydot1(e) into recorddot1) 
+  //weak first
+  val lvls : List[Parser[Expr]] = List(
+    letin(1) | letrecin(1) //fun function try //0
+    , sequence(2)
+    , ifthenelse(3) | ifthen(3)
+    , failure("<- :=")
+    , tuple(5) 
+    , binop(6)
+    , failure(" - -. (prefix)")
+    , app(8)//failure("app, constr app, assert , lazy")
+    , exprLvl(9) into selection
+    , failure("prefix") //9
+  )
+  def maxlvl = 9
+
+  def expr = exprLvl(0)
+  def exprLvl(i:Int) : Parser[Expr] =   
+    if (i <= maxlvl) //TODO hardgecoded
+      parentheses | lvls(i) |  exprLvl(i+1)  //TODO error
+    else simpleexpr 
+
+
+  private def eqRegex: Parser[String] = """=(?![!§%&/=\?\+\*#\-:\<\>|])""".r ^^ { case s: String => s }
+  private def infixop = infixsymbol |  """[*+=-<>]∣-\.∣∣!=∣or∣\|\|∣&∣&&|:=|mod∣land∣lor∣lxor∣lsl∣lsr∣asr""".r  
+  private def infixsymbol= """[=<>@^|&+*/$%-]""".r ~ rep(operatorchar) ^^ { case a~l =>  a+(l.mkString(""))}
+  private def operatorchar = """[-!$%&*+./:<=>?@^|~]""".r
+
+  private def prefixsymbol = "!" ~ rep(operatorchar) ^^ { case a~l => a+(l.mkString(""))} |
+                             ("\\?"|"~") ~ rep1(operatorchar) ^^ { case a~l => a+(l.mkString(""))} 
+  //Shunting-yard algorithm TODO associative 
+  private def binop(p: Int): Parser[Expr] = exprLvl(p) ~ rep(infixsymbol ~ exprLvl(p)) ^^ {
+    case x ~ xs =>
+      var input = new Queue ++= (x :: (xs.flatMap({ case a ~ b => List(a, b) })))
+      val out: Stack[Expr] = new Stack
+      val ops: Stack[String] = new Stack
+      var isOp = false
+      while (!input.isEmpty) {
+        val o1 = input.dequeue
+        if (isOp) {
+          while (!ops.isEmpty && prec(o1) <= prec(ops.head)) {
+            clearStack(out, ops)
+          }
+          ops.push(o1.asInstanceOf[String])
+        } else {
+          out.push(o1.asInstanceOf[Expr])
+        }
+        isOp = !isOp
+      }
+      while (!ops.isEmpty) clearStack(out, ops)
+      if (out.size != 1) failure("OutputStack should have only one value")
+      out.pop
+  }
+
+  private def clearStack(out: Stack[Expr], ops: Stack[String]) =
+    {
+      val o2 = ops.pop
+      val b = out.pop
+      val a = out.pop
+
+      out.push(InfixOp(a,o2,b))
+
+    }
+
+  //TODO precedences and associativity
+  private def prec(op: Any): Int = op match {
+    case _ => 0
+  }
+
+// case class FunBinding(name : String, args: List[Parameter], e: Expr, t: Option[Type] = None, t2: Option[Type] = None) extends LetBinding 
+  def letbinding: Parser[LetBinding] = binding | funbinding
+  def binding: Parser[Binding] = (pattern <~ "=") ~ expr ^^ { case p~e => Binding(p,e) } 
+  //TODO typexpr
+  def funbinding: Parser[FunBinding] = lowercaseident ~ (parameter *) ~  ( "=" ~> expr) ^^ { case n~ps~e => FunBinding(n, ps, e) } 
+  /*
+    case InfixOp(a,o,b)       => parens(a <+> text(o) <+> b)
+    case UnaryOp(o,a)         => parens(text(o) <+> a)
+    case App(f,x)             => parens(f <+> x)
+    case App(f,x, xs@ _*)     => parens(f <+> x <+> catList(xs.map(showArg), space))
+    case Fun(args,e,None)     => parens("fun" <+> catList(args.map(showParameter), "") <+> "->" <+> e)
+    case Fun(args,e,Some(g))  => parens("fun" <+> catList(args.map(showParameter), "") <+>
+        "when"<+> g <+> "->" <+> e)
+    case Function(ps@ _*)     => "function" <+> lsep(ps.map(showPatternMatching), line)
+    case Object(b)            => "object" <+> b <@> "end"
+    case Constr(n)            => n
+    case Constr(n, l@ _*)     => n <> list(l.toList, "", showExpr)
+    case Match(e, bs@ _*)     => "match" <+> e <+> "with" <>
+      nest(line <> bs.map(showPatternMatching).reduce(_ <@> _))
+    case Try(e, bs@ _*)       => "try" <+> e <+> "with" <>
+      nest(line <> bs.map(showPatternMatching).reduce(_ <@> _))
+    case RecordCopy(e,m)      => enclose("{", e <+> "with" <+>
+        catList(m.map{
+          case (s,t)          => s <+> "=" <+> t }.toList, semi)
+        ,"}")
+    case Ascription(e,t)      => parens(e<+>":"<+>t)
+    case New(n)               => "new" <+> n
+    case CharOf(s,i)          => s <> dot <> brackets(i)
+    case UpdateString(s,i,c)  => s <> dot <> brackets(i) <+> "<-" <+> c
+    case BeginEnd(e)          => "begin" <@> e <@> "end"
+    case MethodCall(e, s)     => e <+> "#" <+> s
+    case InstVar(s)           => value(s)
+    case AssignInstVar(s, e)  => value(s) <+> "<-" <+> e
+    case TaggedExpr(name, e)  => parens("`" <> name <+> e)
+    case Coercion(n, None, t2) => parens(n <+> ":>" <+> t2)
+    case Coercion(n, Some(t), t2) => parens(n <+> ":" <+> t <+> ":>" <+> t2)
+case class LabeledArg(name: String, e: Option[Expr] = None) extends Argument
+case class OptionalLabeledArg(name: String, e: Option[Expr] = None) extends Argument
+
+sealed abstract class LetBinding
+case class FunBinding(name : String, args: List[Parameter], e: Expr, t: Option[Type] = None, t2: Option[Type] = None) extends LetBinding 
+   */
 }

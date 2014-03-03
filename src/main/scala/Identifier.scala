@@ -1,6 +1,11 @@
 package scalaocaml
 
-
+import scala.util.parsing.combinator.Parsers
+import scala.util.parsing.combinator.RegexParsers
+import scala.util.parsing.combinator.Parsers
+import scala.util.matching.Regex
+import scala.language.postfixOps
+import scala.language.implicitConversions
 
 
 abstract class Identifier
@@ -37,4 +42,82 @@ trait IdentifierPrettyPrinter {
 }
 
 
+trait IdentifierParser extends RegexParsers with Parsers {
+  self: OCamlParser =>
 
+  def name: Parser[Name] = (rep1sep(capitalizedident, ".") <~ ".").? ~ lowercaseident ^^
+  { case path ~ s => Name(s,path.getOrElse(Nil)) }
+
+  val ident: Parser[String] =  not(keyword) ~> """[a-zA-Z_][a-zA-Z0-9_']*""".r
+  val lowercaseident: Parser[String] =  not(keyword) ~> """[a-z_][a-zA-Z0-9_']*""".r
+  val capitalizedident: Parser[String] =  not(keyword) ~> """[A-Z][a-zA-Z0-9_']*""".r
+
+  def keyword = keywords.mkString("", "|", "").r
+
+  val keywords = List(
+    "and",
+    "as",
+    "assert",
+    "begin",
+    "class",
+    "constraint",
+    "do",
+    "done",
+    "downto",
+    "else",
+    "end",
+    "exception",
+    "external",
+    "false",
+    "for",
+    "fun",
+    "function",
+    "functor",
+    "if",
+    "in",
+    "include",
+    "inherit",
+    "inherit!",
+    "initializer",
+    "lazy",
+    "let",
+    "match",
+    "method",
+    "method!",
+    "module",
+    "mutable",
+    "new",
+    "object",
+    "of",
+    "open",
+    "open!",
+    "or",
+    "private",
+    "rec",
+    "sig",
+    "struct",
+    "then",
+    "to",
+    "true",
+    "try",
+    "type",
+    "val",
+    "val!",
+    "virtual",
+    "when",
+    "while",
+    "with",
+    "!=",    "#",     "&",     "&&",    "'",
+    "\\(",     "\\)",     "\\*",     "\\+",     ",",
+    "-",     "-\\.",    "->",    "\\.",     "\\.\\.", 
+    ":",     "::",    ":=",    ":>",    ";",
+    ";;",    "<",     "<-",    "=",     ">",  
+    ">\\]",    ">\\}",    "\\?",     "\\[",     "\\[<",   
+    "\\[>",    "\\[\\|",    "]",     "_",     "`",   
+    "\\{",     "\\{<",    "\\|",     "\\|\\]",    "\\|\\|", 
+    "\\}",     "~",     "parser",         "value",
+    "\\$",     "\\$\\$",    "\\$:",    "<:",    "<<", 
+    ">>",    "\\?\\?"  )
+
+
+}

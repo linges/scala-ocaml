@@ -1,5 +1,12 @@
 package scalaocaml
 
+import scala.util.parsing.combinator.Parsers
+import scala.util.parsing.combinator.RegexParsers
+import scala.util.parsing.combinator.Parsers
+import scala.util.matching.Regex
+import scala.language.postfixOps
+import scala.language.implicitConversions
+
 trait Pattern extends Parameter
 /**
   * A pattern that consists in a value name matches any value, binding the name to the value. 
@@ -130,3 +137,51 @@ trait PatternPrettyPrinter {
     case Underscore => "_"
   }
 }
+
+trait PatternParser extends RegexParsers with Parsers {
+  self: OCamlParser =>
+
+  def pattern: Parser[Pattern] = constant | pvar
+  def pvar : Parser[Pattern] = lowercaseident ^^ { PVar(_) }
+  def parameter : Parser[Parameter] = pattern
+}
+/*
+
+  implicit def showParameter(p: Parameter) : Doc = p match {
+    case p: Pattern => showPattern(p)
+    case LabeledPar(l, None) => "~" <> l
+    case LabeledPar(l, Some(t)) => "~" <> l <+> ":" <+> t
+    case LabeledParWithPattern(l, p) => "~" <> l <+> ":" <+> p
+    case OptionalLabeledPar(l, None, None, None) => "?" <> l
+    case OptionalLabeledPar(l, Some(p), None, None) => "?" <> l <+> ":" <+> p
+    case OptionalLabeledPar(l, None, t, e) => "?" <> parens(l <> 
+        t.map(" :"<+> _).getOrElse("") <> e.map(" ="<+> _).getOrElse("") )
+    case OptionalLabeledPar(l, Some(p), t, e) => "?" <> l <+> ":" <+> parens(p <> 
+        t.map(" :"<+> _).getOrElse("") <> e.map(" ="<+> _).getOrElse("") )
+  }
+
+  implicit def showPatternMatching(b: PatternMatching) : Doc = b match {
+    case Matching(p,e) => "|"<+> p <+> "->" <+> e
+    case MatchingWithGuard(p,g,e) => "|"<+> p <+>"when" <+> g <+> "->" <+> e
+  }
+
+  implicit def showPattern(e: Pattern) : Doc = e match {
+    case c: Constant => showConstant(c)
+    case PVar(v) => value(v)
+    case PTuple(l@ _*) => list(l.toList, "", showPattern)
+    case PList(l@ _*) => if (l.isEmpty) "[]" else list(l.toList, "", showPattern, space<>"::")
+    case PRecord(m) => enclose("{",  catList(m.map{
+      case (s,t) => s <+> "=" <+> t }.toList, semi)
+        ,"}")
+    case RecordPunning(m@ _*) => enclose("{", catList(m.map(showIdentifier), semi) ,"}")
+    case ConstrPattern(n) => n
+    case ConstrPattern(n, p@ _*) => n <> parens(catList(p.map(showPattern),comma))
+    case OrPattern(a,b) => a <+> "|" <+> b
+    case FixSizeList(l) => brackets( catList(l.map(showPattern), semi) )
+    case ArrayPattern(l@ _*)         => enclose("[|", catList(l.map(showPattern), semi), "|]")
+    case Alias(p,n) => p <+> "as" <+> n
+    case PTypeconstr(n) => "#" <> n
+    case Underscore => "_"
+
+
+ */
