@@ -50,22 +50,22 @@ trait ConstantPrettyPrinter {
 trait ConstantParser extends RegexParsers with Parsers {
   self: OCamlParser =>
 
-  def constant: Parser[Constant] = char | string | float | num  | unit | otrue | ofalse |
+  lazy val constant: Parser[Constant] = char | string | float | num  | unit | otrue | ofalse |
                                    emptylist | emptyarray | emptybeginend | tagname
 
-  private def char: Parser[OChar] = """\'.\'""".r ^^ {  s: String => OChar(s.apply(1)) }
-  private def string: Parser[OString] = """"(\\"|[^"])*"""".r ^^ { s: String => OString(s.substring(1, s.length() - 1)) }
-  private def num: Parser[OInt] = """-?\d+""".r ^^ { case d => OInt(d.toInt) }
+  lazy val char: Parser[OChar] = """\'.\'""".r ^^ {  s: String => OChar(s.apply(1)) }
+  lazy val string: Parser[OString] = """"(\\"|[^"])*"""".r ^^ { s: String => OString(s.substring(1, s.length() - 1)) }
+  lazy val num: Parser[OInt] = """-?\d+""".r ^^ { case d => OInt(d.toInt) }
   //TODO underscore :  For convenience and readability, underscore characters (_) are accepted (and ignored) within floating-point literals.
-  private def float: Parser[OFloat] = 
+  lazy val float: Parser[OFloat] = 
     """-?(\d+\.\d*|\.\d+)([Ee](-|\+)?\d+)?""".r ^^ {
      d => OFloat(d.toDouble)
   }
-  private def unit: Parser[Unit.type] = """\(\)""".r ^^ { _ => Unit }
-  private def otrue: Parser[True.type] = """true""".r ^^ { _ => True }
-  private def ofalse: Parser[False.type] = """False""".r ^^ { _ => False }
-  private def emptylist: Parser[EmptyList.type] = """\[\]""".r ^^ { _ => EmptyList }
-  private def emptyarray: Parser[EmptyArray.type] = """\[\|\|\]""".r ^^ { _ => EmptyArray }
-  private def emptybeginend: Parser[EmptyBeginEnd.type] = """begin end""".r ^^ { _ => EmptyBeginEnd }
-  private def tagname: Parser[TagName] = """`""".r ~ capitalizedident ^^ { case _ ~ s => TagName(s) }
+  lazy val unit: Parser[Unit.type] = """\(\)""".r ^^ { _ => Unit } //TODO
+  lazy val otrue: Parser[True.type] = """true""".r ^^ { _ => True }
+  lazy val ofalse: Parser[False.type] = """False""".r ^^ { _ => False }
+  lazy val emptylist: Parser[EmptyList.type] = """\[\]""".r ^^ { _ => EmptyList }
+  lazy val emptyarray: Parser[EmptyArray.type] = """\[\|\|\]""".r ^^ { _ => EmptyArray }
+  lazy val emptybeginend: Parser[EmptyBeginEnd.type] = """begin end""".r ^^ { _ => EmptyBeginEnd }
+  lazy val tagname: Parser[TagName] = """`""".r ~ capitalizedident ^^ { case _ ~ s => TagName(s) }
 }

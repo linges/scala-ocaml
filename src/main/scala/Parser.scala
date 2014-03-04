@@ -9,15 +9,22 @@ import scala.util.matching.Regex
 import scala.language.postfixOps
 import scala.language.implicitConversions
 
+  object HelloWorld {
+    def main(args: Array[String]) {
+      val a = OCamlParser.parseExpr(args(0))
+      println(a)
+      println("|".matches("\\|"))
+    }
+  }
+
 
 object OCamlParser extends OCamlParser
-
 
 /**
  * Parser implementation module based on scala's combinators
  */
-trait OCamlParser extends RegexParsers with Parsers with ExprParser with ConstantParser
-      with IdentifierParser with PatternParser{
+trait OCamlParser extends RegexParsers with Parsers
+      with IdentifierParser with ConstantParser with PatternParser with ExprParser{
   def parseExpr(in: String): Either[String, Expr] = {
     try {
       parseAll(expr, new ParserString(in)) match {
@@ -49,6 +56,6 @@ trait OCamlParser extends RegexParsers with Parsers with ExprParser with Constan
     }
   }
   def definition : Parser[Definition] = let | letrec
-  def all : Parser[Any] = expr | definition 
+  def all : Parser[Any] = expr | definition | pattern
 }
 

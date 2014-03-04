@@ -47,13 +47,34 @@ trait IdentifierParser extends RegexParsers with Parsers {
 
   def name: Parser[Name] = (rep1sep(capitalizedident, ".") <~ ".").? ~ lowercaseident ^^
   { case path ~ s => Name(s,path.getOrElse(Nil)) }
+  def valuepath: Parser[Name] = (rep1sep(capitalizedident, ".") <~ ".").? ~ 
+   valuename ^^
+  { case path ~ s => Name(s,path.getOrElse(Nil)) }
 
-  val ident: Parser[String] =  not(keyword) ~> """[a-zA-Z_][a-zA-Z0-9_']*""".r
-  val lowercaseident: Parser[String] =  not(keyword) ~> """[a-z_][a-zA-Z0-9_']*""".r
-  val capitalizedident: Parser[String] =  not(keyword) ~> """[A-Z][a-zA-Z0-9_']*""".r
+  def constrpath: Parser[Name] = (rep1sep(capitalizedident, ".") <~ ".").? ~ 
+  capitalizedident  ^^
+  { case path ~ s => Name(s,path.getOrElse(Nil)) }
 
-  def keyword = keywords.mkString("", "|", "").r
+  val valuename = (lowercaseident | operatorname)
+  val operatorname = "(" ~> (infixop | prefixsymbol) <~")" ^^ { case s => "("+s+")" }
 
+  def ident: Parser[String] =  """[a-zA-Z_][a-zA-Z0-9_']*""".r into checkKeyword
+  def lowercaseident: Parser[String] =  """[a-z_][a-zA-Z0-9_']*""".r into checkKeyword
+  def capitalizedident: Parser[String] =   """[A-Z][a-zA-Z0-9_']*""".r into checkKeyword
+
+  def keyword = 
+    (keywords.map(_ + "\\b") ++
+    keysymbols).mkString("", "|", "").r
+
+  lazy val infixop =  (infixsymbol |
+    """[*+=<>-]∣-\.∣∣!=∣or∣\|\|∣&∣&&|:=|mod∣land∣lor∣lxor∣lsl∣lsr∣asr|::""".r  ) into checkKeyword
+  lazy val infixsymbol=  """[=<>@^|&+*/$%-]""".r ~ rep(operatorchar) ^^ { case a~l =>  a+(l.mkString(""))}
+  lazy val operatorchar = """[-!$%&*+./:<=>?@^|~]""".r
+
+  def checkKeyword(s: String) : Parser[String] = if (s.matches(keyword.toString)) failure("keyword used as identifier") else success(s)
+
+  lazy val prefixsymbol = (("!" ~ rep(operatorchar) ^^ { case a~l => a+(l.mkString(""))} |
+                             ("\\?"|"~") ~ rep1(operatorchar) ^^ { case a~l => a+(l.mkString(""))}) ) into checkKeyword
   val keywords = List(
     "and",
     "as",
@@ -106,7 +127,12 @@ trait IdentifierParser extends RegexParsers with Parsers {
     "virtual",
     "when",
     "while",
-    "with",
+    "with", 
+    "parser",  
+    "value")
+    val keysymbols = List( "\\|", "->") 
+
+    val ops = List(
     "!=",    "#",     "&",     "&&",    "'",
     "\\(",     "\\)",     "\\*",     "\\+",     ",",
     "-",     "-\\.",    "->",    "\\.",     "\\.\\.", 
@@ -115,7 +141,7 @@ trait IdentifierParser extends RegexParsers with Parsers {
     ">\\]",    ">\\}",    "\\?",     "\\[",     "\\[<",   
     "\\[>",    "\\[\\|",    "]",     "_",     "`",   
     "\\{",     "\\{<",    "\\|",     "\\|\\]",    "\\|\\|", 
-    "\\}",     "~",     "parser",         "value",
+    "\\}",     "~",    
     "\\$",     "\\$\\$",    "\\$:",    "<:",    "<<", 
     ">>",    "\\?\\?"  )
 

@@ -141,9 +141,37 @@ trait PatternPrettyPrinter {
 trait PatternParser extends RegexParsers with Parsers {
   self: OCamlParser =>
 
-  def pattern: Parser[Pattern] = constant | pvar
+  def simplepattern: Parser[Pattern] = constant | pvar | arrayp | underscore |listp
+  val underscore = "_" ^^ { _ => Underscore }
+  def pattern: Parser[Pattern] = lvlp0 
   def pvar : Parser[Pattern] = lowercaseident ^^ { PVar(_) }
   def parameter : Parser[Parameter] = pattern
+
+  lazy val arrayp: Parser[Pattern] = "[|" ~> rep1sep(pattern, ";") <~ (";" ?) <~ "|]" ^^
+                            { case l => ArrayPattern(l:_*) }
+  lazy val listp: Parser[Pattern] = "[" ~> rep1sep(pattern, ";") <~ (";" ?) <~ "]" ^^
+                            { case l => FixSizeList(l) }
+
+  lazy val asp = (lvlp5 <~ "as") ~ valuename ^^ { case p~n => Alias(p,n) }
+
+  lazy val orpattern = (lvlp4 <~ "|") ~ lvlp4 ^^ { case a~b => OrPattern(a,b) }
+
+  lazy val lvlp0 = lvlp1
+  lazy val lvlp1 = lvlp2
+  lazy val lvlp2 = lvlp3
+  lazy val lvlp3 = orpattern | lvlp4
+  lazy val lvlp4 = asp | lvlp5
+  lazy val lvlp5 = simplepattern
+
+
+  lazy val pattermatching = ((("|"?) ~> pattern)  ~ ("->" ~> expr) into withguard) ~
+                            rep(matching|matchingwithguard) ^^ { case pm~pms => pm::pms}
+  def withguard(pe:Pattern~Expr) : Parser[PatternMatching] =  ("when" ~> expr) ^^
+                               { case g => MatchingWithGuard(pe._1, pe._2 ,g) } | 
+                               success(Matching(pe._1,pe._2))
+  lazy val matching = ("|" ~> pattern)  ~ ("->" ~> expr) ^^ { case p~e => Matching(p,e) } 
+  lazy val matchingwithguard = ("|" ~> pattern)  ~ ("->" ~> expr) ~ ("when" ~> expr) ^^
+                               { case p~e~g => MatchingWithGuard(p,e,g) }
 }
 /*
 
@@ -178,7 +206,6 @@ trait PatternParser extends RegexParsers with Parsers {
     case ConstrPattern(n, p@ _*) => n <> parens(catList(p.map(showPattern),comma))
     case OrPattern(a,b) => a <+> "|" <+> b
     case FixSizeList(l) => brackets( catList(l.map(showPattern), semi) )
-    case ArrayPattern(l@ _*)         => enclose("[|", catList(l.map(showPattern), semi), "|]")
     case Alias(p,n) => p <+> "as" <+> n
     case PTypeconstr(n) => "#" <> n
     case Underscore => "_"
