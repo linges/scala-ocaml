@@ -1,5 +1,11 @@
 package scalaocaml
 
+import scala.util.parsing.combinator.Parsers
+import scala.util.parsing.combinator.RegexParsers
+import scala.util.parsing.combinator.Parsers
+import scala.util.matching.Regex
+import scala.language.postfixOps
+import scala.language.implicitConversions
 
 /**
   * Type definitions are introduced by the type keyword, 
@@ -112,7 +118,7 @@ case class TupleType(ts: Type*) extends Type
   * with n parameters, denotes the application of the n-ary type constructor 
   * typeconstr to the types typexpr1 through typexprn.
   */
-case class TypeConstr(v : String, args: Type*) extends Type
+case class TypeConstr(v : Name, args: Type*) extends Type
 
 /**
   * The type expression typexpr as 'ident denotes the same type as typexpr, 
@@ -225,9 +231,9 @@ trait TypePrettyPrinter {
   self: OCamlPrettyPrinter =>
 
   implicit def showType(e: Type) : Doc = e match {
-    case TypeConstr(v)         => value(v)
-    case TypeConstr(v, t)      => t <+> value(v)
-    case TypeConstr(v, ts @ _*)  => list(ts.toList, "", showType) <+> value(v)
+    case TypeConstr(v)         => v
+    case TypeConstr(v, t)      => t <+> v
+    case TypeConstr(v, ts @ _*)  => list(ts.toList, "", showType) <+> v
     case TypeIdent(v) => "'" <> value(v)
     case TUnderscore => "_"
     case FunctionType(t1,t2) => parens(t1 <+> "->" <+> t2)
@@ -309,4 +315,23 @@ trait TypePrettyPrinter {
     case NewException(name, ts@ _*) => "exception" <+> name <+> "of" <+> catList(ts.map(showType), " *")
     case AlternateNameException(name , constr) => "exception" <+> name <+> "=" <+> constr
   }
+}
+
+trait TypeParser extends RegexParsers with Parsers {
+  self: OCamlParser =>
+
+  lazy val tparentheses: Parser[Type] = "(" ~> typeexpr <~ ")"
+
+  lazy val typconstr : Parser[Type] = 
+    name ^^ { case n => TypeConstr(n)} |
+    lvlt1 ~ name ^^ { case ts~n => TypeConstr(n, ts)} |
+    ("(" ~> typeexpr ~ repsep(typeexpr, ",") <~ ")") ~ name ^^ { case t~ts~n => TypeConstr(n, (t::ts):_*)}
+
+  lazy val typeexpr = lvlt0
+
+  lazy val lvlt0 = typconstr | lvlt1 //typ constr
+  lazy val lvlt1 = lvlt2 // *
+  lazy val lvlt2 = lvlt3 // ->
+  lazy val lvlt3 = lvlt4 // as
+  lazy val lvlt4 = tparentheses
 }

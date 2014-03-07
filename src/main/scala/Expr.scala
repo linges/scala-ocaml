@@ -391,43 +391,53 @@ trait ExprParser extends RegexParsers with Parsers {
 
   lazy val simpleexpr: Parser[Expr] =  list | constant | record | vari | array | forto |
                                        fordown | whiledone | beginend | onew | tagged |
-                                       omatch
+                                       omatch | ascription | coercion | recordcopy
+
+  lazy val ascription: Parser[Expr] = ("(" ~> expr <~ ":") ~ typeexpr <~ ")" ^^ { case e~t => Ascription(e,t) }
+
+  lazy val coercion: Parser[Expr] = ("(" ~> expr ~ ((":" ~> typeexpr).?) ~ (":>" ~> typeexpr) <~ ")") ^^ { case e~o~t => Coercion(e,o,t) }
 
   lazy val beginend: Parser[Expr] = "begin" ~>  expr <~ "end" ^^ { x => BeginEnd(x) }
 
-  lazy val onew: Parser[Expr] = "new" ~> name ^^ { x => New(x) }
+  lazy val onew = "new" ~> name ^^ { x => New(x) }
 
   def methodcall(e:Expr): Parser[Expr] = "#" ~> lowercaseident ^^ { case i => MethodCall(e,i) } | success(e)
 
   lazy val forto: Parser[Expr] = ("for" ~> ident <~ "=") ~ (expr <~ "to") ~ 
                             (expr <~ "do") ~ expr <~ "done" ^^
                             { case v~f~t~d => ForTo(v,f,t,d) }
+
   lazy val fordown: Parser[Expr] = ("for" ~> ident <~ "=") ~ (expr <~ "downto") ~ 
                               (expr <~ "do") ~ expr <~ "done" ^^
                               { case v~f~t~d => ForDown(v,f,t,d) }
+
   lazy val whiledone: Parser[Expr] = ("while" ~> expr <~ "do") ~ expr <~ "done" ^^ 
                                 { case e~d => While(e,d) }
 
-  lazy val vari: Parser[Expr] = valuepath ^^ {Var(_)}
-  lazy val record: Parser[Expr] = "{" ~> rep1sep(recordField, ";") <~ "}" ^^
+  lazy val vari = valuepath ^^ {Var(_)}
+
+  lazy val record = "{" ~> rep1sep(recordField, ";") <~ "}" ^^
                               { case l : List[(Name,Expr)] => Record(l.toMap) }
 
-  lazy val recordField: Parser[(Name, Expr)] = (name <~ "=") ~ expr ^^ { case n~e => (n,e) }
+  lazy val recordcopy = "{" ~> (expr <~ "with") ~ rep1sep(recordField, ";") <~ "}" ^^
+                              { case e~l  => RecordCopy(e, l.toMap) }
 
-  lazy val array: Parser[Expr] = "[|" ~> rep1sep(lvl2, ";") <~ (";" ?) <~ "|]" ^^
+  lazy val recordField: Parser[(Name, Expr)] = (name <~ "=") ~ lvl2 ^^ { case n~e => (n,e) }
+
+  lazy val array = "[|" ~> rep1sep(lvl2, ";") <~ (";" ?) <~ "|]" ^^
                             { case l => OArray(l:_*) }
-  lazy val list: Parser[Expr] = "[" ~> rep1sep(lvl2, ";") <~ (";" ?) <~ "]" ^^
+  
+  lazy val list = "[" ~> rep1sep(lvl2, ";") <~ (";" ?) <~ "]" ^^
                             { case l => OList(l:_*) }
 
-  lazy val ifthenelse: Parser[Expr] = ("if" ~> expr <~ "then") ~ (expr <~ "else") ~ lvl3 ^^
+  lazy val ifthenelse: Parser[Expr] = ("if" ~> expr <~ "then") ~ (expr <~ "else") ~ lvl2 ^^
                                  { case c ~ t ~ e => IfThenElse(c,t,e) }
 
-  lazy val ifthen: Parser[Expr] = ("if" ~> expr <~ "then")  ~ lvl3 ^^
+  lazy val ifthen: Parser[Expr] = ("if" ~> expr <~ "then")  ~ lvl2 ^^
                                  { case c ~ t => IfThen(c,t) }
 
-  lazy val tuple: Parser[Expr] = (lvl5 <~ ",") ~ repsep(lvl5, ",")  ^^
+  lazy val tuple = (lvl5 <~ ",") ~ repsep(lvl5, ",")  ^^
                              { case e~l => Tuple(e::l:_*) } 
-
 
   lazy val tagged = "`" ~> ident ~ expr ^^ { case i~e => TaggedExpr(i,e) }
 
@@ -451,40 +461,47 @@ trait ExprParser extends RegexParsers with Parsers {
   lazy val instvarassign: Parser[Expr] = (lowercaseident <~ "<-") ~ expr ^^ { case n~e => AssignInstVar(n,e) }
 
   lazy val parentheses: Parser[Expr] = "(" ~> expr <~ ")"
-  lazy val sequence: Parser[Expr] = (lvl2 <~ ";")  ~ repsep(lvl2, ";") ^^ { case e~l => Sequence(e::l:_*) }
+  lazy val sequence  = (lvl2 <~ ";")  ~ repsep(lvl2, ";") ^^ { case e~l => Sequence(e::l:_*) }
 
-  lazy val letin: Parser[LetIn] = ("let" ~> rep1sep(letbinding, "and") <~ "in") ~ lvl1 ^^
+  lazy val letin: Parser[LetIn] = ("let" ~> rep1sep(letbinding, "and") <~ "in") ~ expr ^^
                              { case l~e => LetIn(l,e) }
-  lazy val letrecin: Parser[LetRecIn] = ("let" ~> "rec" ~> rep1sep(letbinding, "and") <~ "in") ~ lvl1 ^^
+  lazy val letrecin: Parser[LetRecIn] = ("let" ~> "rec" ~> rep1sep(letbinding, "and") <~ "in") ~ expr ^^
                              { case l~e => LetRecIn(l,e) }
-  lazy val let: Parser[Let] = ("let" ~> rep1sep(letbinding, "and") ) ^^
+  lazy val let = ("let" ~> rep1sep(letbinding, "and") ) ^^
                              { case l => Let(l:_*) }
-  lazy val letrec: Parser[LetRec] = ("let" ~> "rec" ~> rep1sep(letbinding, "and"))  ^^
+  lazy val letrec = ("let" ~> "rec" ~> rep1sep(letbinding, "and"))  ^^
                              { case l => LetRec(l:_*) }
 
-  lazy val prefix: Parser[Expr] = (prefixsymbol|"-."|"-") ~ lvl10 ^^ { case s~e => UnaryOp(s,e) } 
+  lazy val prefix = (prefixsymbol) ~ lvl10 ^^ { case s~e => UnaryOp(s,e) } 
 
-  lazy val omatch = ("match" ~> expr) ~ ("with" ~> pattermatching) ^^ { case e~ps => Match(e,ps:_*) }
+  lazy val omatch = ("match" ~> expr) ~ ("with" ~> patternmatching) ^^ { case e~ps => Match(e,ps:_*) }
 
+  lazy val neg = ("-"|"-.") ~ lvl7 ^^ { case o~e => UnaryOp(o, e) } 
 
-  lazy val lvl0 = letin | letrecin | lvl1
+  lazy val otry : Parser[Expr] = ("try" ~> expr <~ "with") ~ patternmatching ^^ { case e~ps => Try(e, ps:_*) }
+ 
+  //We use this do represent priorities.
+  //Higher level means higher priority.
+  //It has the nice side effect that the compiler forbids unwanted recursion,
+  //if we don't specify a type for the parser.
+  lazy val lvl0 = letin | letrecin | otry | lvl1
   lazy val lvl1 = sequence | lvl2
   lazy val lvl2 = ifthenelse | ifthen | lvl3
   lazy val lvl3 = instvarassign | lvl4 // <- :=
   lazy val lvl4 = tuple | lvl5 
   lazy val lvl5 = binop | lvl6
-  lazy val lvl6 = lvl7
+  lazy val lvl6 = neg | lvl7 //(prefix)
   lazy val lvl7 = app | constr | lvl8
-  lazy val lvl8 = lvl9 into selection 
-  lazy val lvl9 = prefix | lvl10 //prefix
+  lazy val lvl8 = (lvl9 into selection) into methodcall
+  lazy val lvl9 = prefix | lvl10
   lazy val lvl10 = (simpleexpr | parentheses) into methodcall
 
   lazy val expr = lvl0 
 
 
 
-  lazy val app: Parser[Expr] = lvl9 ~ rep1(arg) ^^ { case f ~ l => App(f, l.head, l.tail :_*)}
-  lazy val constr: Parser[Expr] = constrpath ~ rep(lvl8) ^^ { case f ~ l => Constr(f, l:_*)}
+  lazy val app = lvl8 ~ rep1(arg) ^^ { case f ~ l => App(f, l.head, l.tail :_*)}
+  lazy val constr = constrpath ~ rep(lvl8) ^^ { case f ~ l => Constr(f, l:_*)}
 
   lazy val arg : Parser[Argument] = labeledarg | optionallabeledarg | lvl8
   lazy val labeledarg = ("~" ~>  labelname ~ (":" ~> lvl8).?) ^^ { case l~e => LabeledArg(l,e) }
@@ -507,24 +524,18 @@ trait ExprParser extends RegexParsers with Parsers {
     case Object(b)            => "object" <+> b <@> "end"
     case Constr(n)            => n
     case Constr(n, l@ _*)     => n <> list(l.toList, "", showExpr)
-    case Match(e, bs@ _*)     => "match" <+> e <+> "with" <>
-      nest(line <> bs.map(showPatternMatching).reduce(_ <@> _))
-    case Try(e, bs@ _*)       => "try" <+> e <+> "with" <>
-      nest(line <> bs.map(showPatternMatching).reduce(_ <@> _))
     case RecordCopy(e,m)      => enclose("{", e <+> "with" <+>
         catList(m.map{
           case (s,t)          => s <+> "=" <+> t }.toList, semi)
         ,"}")
     case Ascription(e,t)      => parens(e<+>":"<+>t)
-    case CharOf(s,i)          => s <> dot <> brackets(i)
-    case UpdateString(s,i,c)  => s <> dot <> brackets(i) <+> "<-" <+> c
     case MethodCall(e, s)     => e <+> "#" <+> s
     case Coercion(n, None, t2) => parens(n <+> ":>" <+> t2)
     case Coercion(n, Some(t), t2) => parens(n <+> ":" <+> t <+> ":>" <+> t2)
 
    */
   //Shunting-yard algorithm TODO associative 
-  lazy val binop: Parser[Expr] = lvl6 ~ rep1(infixop ~ lvl6) ^^ {
+  lazy val binop = lvl6 ~ rep1(infixop ~ lvl6) ^^ {
     case x ~ xs =>
       var input = new Queue ++= (x :: (xs.flatMap({ case a ~ b => List(a, b) })))
       val out: Stack[Expr] = new Stack

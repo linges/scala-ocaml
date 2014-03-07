@@ -70,8 +70,8 @@ case class PTuple(l: Pattern*) extends Pattern
   * for i = 1,… , n. The record value can define more fields than field1 …fieldn; 
   * the values associated to these extra fields are not taken into account for matching.
   */
-case class PRecord(m: Map[Name, Pattern]) extends Pattern
-case class RecordPunning(names: Name*) extends Pattern
+case class PRecord(m: Map[Name, Option[Pattern]]) extends Pattern
+//case class RecordPunning(names: Name*) extends Pattern
 
 /**
   * The pattern [| pattern1 ; … ;  patternn |] matches arrays of length n 
@@ -124,9 +124,11 @@ trait PatternPrettyPrinter {
     case PTuple(l@ _*) => list(l.toList, "", showPattern)
     case PList(l@ _*) => if (l.isEmpty) "[]" else list(l.toList, "", showPattern, space<>"::")
     case PRecord(m) => enclose("{",  catList(m.map{
-      case (s,t) => s <+> "=" <+> t }.toList, semi)
+      case (s,t) => s <>
+       t.map(space <> "=" <+> _).getOrElse(empty)
+     }.toList, semi)
         ,"}")
-    case RecordPunning(m@ _*) => enclose("{", catList(m.map(showIdentifier), semi) ,"}")
+    //case RecordPunning(m@ _*) => enclose("{", catList(m.map(showIdentifier), semi) ,"}")
     case ConstrPattern(n) => n
     case ConstrPattern(n, p@ _*) => n <> parens(catList(p.map(showPattern),comma))
     case OrPattern(a,b) => a <+> "|" <+> b
@@ -141,7 +143,8 @@ trait PatternPrettyPrinter {
 trait PatternParser extends RegexParsers with Parsers {
   self: OCamlParser =>
 
-  def simplepattern: Parser[Pattern] = constant | pvar | arrayp | underscore |listp
+  def simplepattern: Parser[Pattern] = constant | pvar | arrayp | underscore | listp |
+                                       recordp 
   val underscore = "_" ^^ { _ => Underscore }
   def pattern: Parser[Pattern] = lvlp0 
   def pvar : Parser[Pattern] = lowercaseident ^^ { PVar(_) }
@@ -156,15 +159,29 @@ trait PatternParser extends RegexParsers with Parsers {
 
   lazy val orpattern = (lvlp4 <~ "|") ~ lvlp4 ^^ { case a~b => OrPattern(a,b) }
 
-  lazy val lvlp0 = lvlp1
-  lazy val lvlp1 = lvlp2
-  lazy val lvlp2 = lvlp3
+  lazy val listop = (lvlp2 <~ "::") ~ repsep(lvlp2, "::") ^^ { case a~b => PList((a::b):_*) }
+
+  lazy val tuplep = (lvlp3 <~ ",") ~ repsep(lvlp3, ",") ^^ { case a~b => PTuple((a::b):_*) }
+
+  lazy val parenthesesp = "(" ~> pattern <~ ")"
+
+  lazy val constrp = constrpath ~ rep(lvlp1) ^^ { case f ~ l => ConstrPattern(f, l:_*)}
+
+  lazy val recordp = "{" ~> rep1sep(recordFieldp, ";") <~ "}" ^^
+                              { case l => PRecord(l.toMap) }
+
+  lazy val recordFieldp: Parser[(Name, Option[Pattern])] = name ~ (("=" ~> pattern)?) ^^
+                                                             { case n~e => (n,e) }
+
+  lazy val lvlp0 = constrp | lvlp1
+  lazy val lvlp1 = listop | lvlp2
+  lazy val lvlp2 = tuplep | lvlp3
   lazy val lvlp3 = orpattern | lvlp4
   lazy val lvlp4 = asp | lvlp5
-  lazy val lvlp5 = simplepattern
+  lazy val lvlp5 = simplepattern | parenthesesp
 
 
-  lazy val pattermatching = ((("|"?) ~> pattern)  ~ ("->" ~> expr) into withguard) ~
+  lazy val patternmatching = ((("|"?) ~> pattern)  ~ ("->" ~> expr) into withguard) ~
                             rep(matching|matchingwithguard) ^^ { case pm~pms => pm::pms}
   def withguard(pe:Pattern~Expr) : Parser[PatternMatching] =  ("when" ~> expr) ^^
                                { case g => MatchingWithGuard(pe._1, pe._2 ,g) } | 
@@ -188,27 +205,9 @@ trait PatternParser extends RegexParsers with Parsers {
         t.map(" :"<+> _).getOrElse("") <> e.map(" ="<+> _).getOrElse("") )
   }
 
-  implicit def showPatternMatching(b: PatternMatching) : Doc = b match {
-    case Matching(p,e) => "|"<+> p <+> "->" <+> e
-    case MatchingWithGuard(p,g,e) => "|"<+> p <+>"when" <+> g <+> "->" <+> e
-  }
 
   implicit def showPattern(e: Pattern) : Doc = e match {
-    case c: Constant => showConstant(c)
-    case PVar(v) => value(v)
-    case PTuple(l@ _*) => list(l.toList, "", showPattern)
-    case PList(l@ _*) => if (l.isEmpty) "[]" else list(l.toList, "", showPattern, space<>"::")
-    case PRecord(m) => enclose("{",  catList(m.map{
-      case (s,t) => s <+> "=" <+> t }.toList, semi)
-        ,"}")
     case RecordPunning(m@ _*) => enclose("{", catList(m.map(showIdentifier), semi) ,"}")
-    case ConstrPattern(n) => n
-    case ConstrPattern(n, p@ _*) => n <> parens(catList(p.map(showPattern),comma))
-    case OrPattern(a,b) => a <+> "|" <+> b
-    case FixSizeList(l) => brackets( catList(l.map(showPattern), semi) )
     case Alias(p,n) => p <+> "as" <+> n
     case PTypeconstr(n) => "#" <> n
-    case Underscore => "_"
-
-
  */

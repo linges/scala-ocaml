@@ -24,7 +24,7 @@ object OCamlParser extends OCamlParser
  * Parser implementation module based on scala's combinators
  */
 trait OCamlParser extends RegexParsers with Parsers
-      with IdentifierParser with ConstantParser with PatternParser with ExprParser{
+      with IdentifierParser with ConstantParser with TypeParser with PatternParser with ExprParser{
   def parseExpr(in: String): Either[String, Expr] = {
     try {
       parseAll(expr, new ParserString(in)) match {
@@ -56,6 +56,6 @@ trait OCamlParser extends RegexParsers with Parsers
     }
   }
   def definition : Parser[Definition] = let | letrec
-  def all : Parser[Any] = expr | definition | pattern
+  def all : Parser[Any] = expr | typeexpr | definition | pattern
 }
 

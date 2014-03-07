@@ -68,13 +68,13 @@ trait IdentifierParser extends RegexParsers with Parsers {
 
   lazy val infixop =  (infixsymbol |
     """[*+=<>-]∣-\.∣∣!=∣or∣\|\|∣&∣&&|:=|mod∣land∣lor∣lxor∣lsl∣lsr∣asr|::""".r  ) into checkKeyword
-  lazy val infixsymbol=  """[=<>@^|&+*/$%-]""".r ~ rep(operatorchar) ^^ { case a~l =>  a+(l.mkString(""))}
+  lazy val infixsymbol=  ("""[=<>@^|&+*/$%-]""" + operatorchar + "*").r 
   lazy val operatorchar = """[-!$%&*+./:<=>?@^|~]""".r
 
-  def checkKeyword(s: String) : Parser[String] = if (s.matches(keyword.toString)) failure("keyword used as identifier") else success(s)
+  def checkKeyword(s: String) : Parser[String] = if (s.matches(keyword.toString)) failure("keyword used as identifier: " + s) else success(s)
 
-  lazy val prefixsymbol = (("!" ~ rep(operatorchar) ^^ { case a~l => a+(l.mkString(""))} |
-                             ("\\?"|"~") ~ rep1(operatorchar) ^^ { case a~l => a+(l.mkString(""))}) ) into checkKeyword
+  lazy val prefixsymbol = (("!"  + operatorchar + "*").r  |
+                             ("[?~]" +operatorchar + "+").r ) into checkKeyword
   val keywords = List(
     "and",
     "as",
