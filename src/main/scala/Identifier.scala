@@ -12,7 +12,7 @@ abstract class Identifier
 case class ExtendedModuleName(moduleName: String, paths : List[ExtendedModulePath] = List()) extends Identifier
 case class ExtendedModulePath(name: ExtendedModuleName, l: List[ExtendedModuleName] = List()) extends Identifier
 
-case class ExtendedName(id: String, path: List[ExtendedModulePath] = List()) extends Identifier
+case class ExtendedName(id: String, path: Option[ExtendedModulePath] = None) extends Identifier
 case class Name(id: String, path: List[String]) extends Identifier
 object Name
 {
@@ -32,8 +32,8 @@ trait IdentifierPrettyPrinter {
   implicit def showIdentifier(n: Identifier) : Doc = n match {
     case Name(n, Nil) => n
     case Name(n, l) => catList(l.map(string),dot) <> dot <> n
-    case ExtendedName(n, Nil) => n
-    case ExtendedName(n, l) => catList(l.map(showIdentifier),dot) <> dot <+> n
+    case ExtendedName(n, None) => n
+    case ExtendedName(n, Some(l)) => l <> dot <+> n
     case ExtendedModulePath(n, Nil) => n
     case ExtendedModulePath(n, l) => catList(l.map(showIdentifier),dot) <> dot <> n
     case ExtendedModuleName(n, Nil) => n
@@ -47,6 +47,18 @@ trait IdentifierParser extends RegexParsers with Parsers {
 
   def name: Parser[Name] = (rep1sep(capitalizedident, ".") <~ ".").? ~ lowercaseident ^^
   { case path ~ s => Name(s,path.getOrElse(Nil)) }
+
+  lazy val extendedname = ( extendedmodulepath <~ "." ).? ~ lowercaseident ^^
+      { case p~n => ExtendedName(n,p) }
+
+  lazy val extendedmodulename : Parser[ExtendedModuleName] = capitalizedident ~ 
+  rep("(" ~> extendedmodulepath <~ ")") ^^
+    { case n ~ es => ExtendedModuleName(n, es) }
+
+  lazy val extendedmodulepath : Parser[ExtendedModulePath] = extendedmodulename ~ 
+    rep ("." ~> extendedmodulename) ^^
+  { case n ~ es => ExtendedModulePath(n, es) }
+
   def valuepath: Parser[Name] = (rep1sep(capitalizedident, ".") <~ ".").? ~ 
    valuename ^^
   { case path ~ s => Name(s,path.getOrElse(Nil)) }
@@ -61,6 +73,8 @@ trait IdentifierParser extends RegexParsers with Parsers {
   def ident: Parser[String] =  """[a-zA-Z_][a-zA-Z0-9_']*""".r into checkKeyword
   def lowercaseident: Parser[String] =  """[a-z_][a-zA-Z0-9_']*""".r into checkKeyword
   def capitalizedident: Parser[String] =   """[A-Z][a-zA-Z0-9_']*""".r into checkKeyword
+
+  val labelname = """[a-z_][a-zA-Z0-9_']*""".r into checkKeyword
 
   def keyword = 
     (keywords.map(_ + "\\b") ++

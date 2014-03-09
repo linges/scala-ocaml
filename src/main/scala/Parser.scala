@@ -40,6 +40,21 @@ trait OCamlParser extends RegexParsers with Parsers
         Left("UNEXPECTED ERROR: " + e.getMessage() + "\n" + baos.toString)
     }
   }
+  def parseType(in: String): Either[String, Type] = {
+    try {
+      parseAll(typeexpr, new ParserString(in)) match {
+        case Success(result, _) => Right(result)
+        case NoSuccess(msg, in1) =>
+          Left(msg)
+      }
+    } catch {
+      //should no longer happen
+      case e: Throwable =>
+        val baos = new ByteArrayOutputStream()
+        e.printStackTrace(new PrintStream(baos))
+        Left("UNEXPECTED ERROR: " + e.getMessage() + "\n" + baos.toString)
+    }
+  }
   def parseAny(in: String): Either[String, Any] = {
     try {
       parseAll(all, new ParserString(in)) match {

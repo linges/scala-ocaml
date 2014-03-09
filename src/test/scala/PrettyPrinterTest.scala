@@ -1,5 +1,5 @@
 
-package scalaocaml.text
+package scalaocaml.test
 import org.scalatest.FunSuite
 import scala.io.Source
 import scalaocaml._
@@ -16,6 +16,9 @@ class PrettyPrinterTest extends FunSuite with TestExamples
     }
     assert(a == b)
   }
+
+
+  def compareType(result: Type, expect: String) = compare(result, expect)
 
   def cleanString(s:String) = 
     s.replaceAll("[\n\r]"," ").replaceAll("\\s+", " ").trim

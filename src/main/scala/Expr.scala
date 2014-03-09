@@ -391,7 +391,7 @@ trait ExprParser extends RegexParsers with Parsers {
 
   lazy val simpleexpr: Parser[Expr] =  list | constant | record | vari | array | forto |
                                        fordown | whiledone | beginend | onew | tagged |
-                                       omatch | ascription | coercion | recordcopy
+                                       omatch | ascription | coercion | recordcopy 
 
   lazy val ascription: Parser[Expr] = ("(" ~> expr <~ ":") ~ typeexpr <~ ")" ^^ { case e~t => Ascription(e,t) }
 
@@ -479,12 +479,14 @@ trait ExprParser extends RegexParsers with Parsers {
   lazy val neg = ("-"|"-.") ~ lvl7 ^^ { case o~e => UnaryOp(o, e) } 
 
   lazy val otry : Parser[Expr] = ("try" ~> expr <~ "with") ~ patternmatching ^^ { case e~ps => Try(e, ps:_*) }
+
+  def fun : Parser[Fun] = "fun" ~> rep(parameter) ~ (("when" ~> expr).?) ~ ("->" ~> expr) ^^ {case ps~g~e => Fun(ps,e,g) }
  
   //We use this do represent priorities.
   //Higher level means higher priority.
   //It has the nice side effect that the compiler forbids unwanted recursion,
   //if we don't specify a type for the parser.
-  lazy val lvl0 = letin | letrecin | otry | lvl1
+  lazy val lvl0 = letin | letrecin | otry | lvl1 | fun
   lazy val lvl1 = sequence | lvl2
   lazy val lvl2 = ifthenelse | ifthen | lvl3
   lazy val lvl3 = instvarassign | lvl4 // <- :=
@@ -508,7 +510,6 @@ trait ExprParser extends RegexParsers with Parsers {
   lazy val optionallabeledarg = ("?" ~>  labelname ~ (":" ~> lvl8).?) ^^ 
                                 { case l~e => OptionalLabeledArg(l,e) }
 
-  val labelname = """[a-z_][a-zA-Z0-9_']*""".r
 
 
 // case class FunBinding(name : String, args: List[Parameter], e: Expr, t: Option[Type] = None, t2: Option[Type] = None) extends LetBinding 
@@ -517,9 +518,6 @@ trait ExprParser extends RegexParsers with Parsers {
   //TODO typexpr
   lazy val funbinding: Parser[FunBinding] = valuename ~ (parameter *) ~  ( "=" ~> expr) ^^ { case n~ps~e => FunBinding(n, ps, e) } 
   /*
-    case Fun(args,e,None)     => parens("fun" <+> catList(args.map(showParameter), "") <+> "->" <+> e)
-    case Fun(args,e,Some(g))  => parens("fun" <+> catList(args.map(showParameter), "") <+>
-        "when"<+> g <+> "->" <+> e)
     case Function(ps@ _*)     => "function" <+> lsep(ps.map(showPatternMatching), line)
     case Object(b)            => "object" <+> b <@> "end"
     case Constr(n)            => n

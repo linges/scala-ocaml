@@ -71,7 +71,6 @@ case class PTuple(l: Pattern*) extends Pattern
   * the values associated to these extra fields are not taken into account for matching.
   */
 case class PRecord(m: Map[Name, Option[Pattern]]) extends Pattern
-//case class RecordPunning(names: Name*) extends Pattern
 
 /**
   * The pattern [| pattern1 ; … ;  patternn |] matches arrays of length n 
@@ -103,7 +102,7 @@ trait PatternPrettyPrinter {
   implicit def showParameter(p: Parameter) : Doc = p match {
     case p: Pattern => showPattern(p)
     case LabeledPar(l, None) => "~" <> l
-    case LabeledPar(l, Some(t)) => "~" <> l <+> ":" <+> t
+    case LabeledPar(l, Some(t)) => parens("~" <> l <+> ":" <+> t)
     case LabeledParWithPattern(l, p) => "~" <> l <+> ":" <+> p
     case OptionalLabeledPar(l, None, None, None) => "?" <> l
     case OptionalLabeledPar(l, Some(p), None, None) => "?" <> l <+> ":" <+> p
@@ -128,7 +127,6 @@ trait PatternPrettyPrinter {
        t.map(space <> "=" <+> _).getOrElse(empty)
      }.toList, semi)
         ,"}")
-    //case RecordPunning(m@ _*) => enclose("{", catList(m.map(showIdentifier), semi) ,"}")
     case ConstrPattern(n) => n
     case ConstrPattern(n, p@ _*) => n <> parens(catList(p.map(showPattern),comma))
     case OrPattern(a,b) => a <+> "|" <+> b
@@ -136,6 +134,7 @@ trait PatternPrettyPrinter {
     case ArrayPattern(l@ _*)         => enclose("[|", catList(l.map(showPattern), semi), "|]")
     case Alias(p,n) => p <+> "as" <+> n
     case PTypeconstr(n) => "#" <> n
+    case PolyVariantPattern(n, p) => "`" <> n <+> p
     case Underscore => "_"
   }
 }
@@ -144,11 +143,10 @@ trait PatternParser extends RegexParsers with Parsers {
   self: OCamlParser =>
 
   def simplepattern: Parser[Pattern] = constant | pvar | arrayp | underscore | listp |
-                                       recordp 
+                                       recordp | typeconstrp 
   val underscore = "_" ^^ { _ => Underscore }
   def pattern: Parser[Pattern] = lvlp0 
   def pvar : Parser[Pattern] = lowercaseident ^^ { PVar(_) }
-  def parameter : Parser[Parameter] = pattern
 
   lazy val arrayp: Parser[Pattern] = "[|" ~> rep1sep(pattern, ";") <~ (";" ?) <~ "|]" ^^
                             { case l => ArrayPattern(l:_*) }
@@ -173,7 +171,10 @@ trait PatternParser extends RegexParsers with Parsers {
   lazy val recordFieldp: Parser[(Name, Option[Pattern])] = name ~ (("=" ~> pattern)?) ^^
                                                              { case n~e => (n,e) }
 
-  lazy val lvlp0 = constrp | lvlp1
+  lazy val typeconstrp = "#" ~> extendedname ^^ { case n => PTypeconstr(n) } 
+  lazy val polyvariantpattern = "`" ~> capitalizedident ~  pattern ^^ { case n~p => PolyVariantPattern(n, p) } 
+
+  lazy val lvlp0 = constrp | polyvariantpattern | lvlp1
   lazy val lvlp1 = listop | lvlp2
   lazy val lvlp2 = tuplep | lvlp3
   lazy val lvlp3 = orpattern | lvlp4
@@ -183,31 +184,29 @@ trait PatternParser extends RegexParsers with Parsers {
 
   lazy val patternmatching = ((("|"?) ~> pattern)  ~ ("->" ~> expr) into withguard) ~
                             rep(matching|matchingwithguard) ^^ { case pm~pms => pm::pms}
+
   def withguard(pe:Pattern~Expr) : Parser[PatternMatching] =  ("when" ~> expr) ^^
                                { case g => MatchingWithGuard(pe._1, pe._2 ,g) } | 
                                success(Matching(pe._1,pe._2))
+
   lazy val matching = ("|" ~> pattern)  ~ ("->" ~> expr) ^^ { case p~e => Matching(p,e) } 
+
   lazy val matchingwithguard = ("|" ~> pattern)  ~ ("->" ~> expr) ~ ("when" ~> expr) ^^
                                { case p~e~g => MatchingWithGuard(p,e,g) }
+
+  lazy val parameter : Parser[Parameter] = pattern |  
+    labeledparameterwithpattern | labeledparameter | optionallabeledpar
+
+  lazy val labeledparameter = "~" ~>  labelname ^^ { case l => LabeledPar(l) } |
+    (("(" ~> "~" ~>  labelname ~ (":" ~> typeexpr).?) <~ ")") ^^ 
+                               { case l~t => LabeledPar(l,t) }
+  lazy val labeledparameterwithpattern = "~" ~>  labelname ~ ( ":" ~> pattern)  ^^ 
+                               { case l~p => LabeledParWithPattern(l,p) }
+
+  lazy val optionallabeledpar = 
+    "?" ~>  (labelname <~ ":" <~ "(") ~ pattern ~ ((":" ~> typeexpr)?) ~ (("=" ~> expr)?) <~")" ^^
+         { case l~p~t~e => OptionalLabeledPar(l,Some(p),t,e) } |
+    "?" ~>  labelname ~ ((":" ~> pattern)?) ^^ { case l~p => OptionalLabeledPar(l,p) } |
+    "?" ~> "(" ~>  labelname  ~ ((":" ~> typeexpr)?) ~ (("=" ~> expr)?) <~")" ^^
+         { case l~t~e => OptionalLabeledPar(l,None,t,e) } 
 }
-/*
-
-  implicit def showParameter(p: Parameter) : Doc = p match {
-    case p: Pattern => showPattern(p)
-    case LabeledPar(l, None) => "~" <> l
-    case LabeledPar(l, Some(t)) => "~" <> l <+> ":" <+> t
-    case LabeledParWithPattern(l, p) => "~" <> l <+> ":" <+> p
-    case OptionalLabeledPar(l, None, None, None) => "?" <> l
-    case OptionalLabeledPar(l, Some(p), None, None) => "?" <> l <+> ":" <+> p
-    case OptionalLabeledPar(l, None, t, e) => "?" <> parens(l <> 
-        t.map(" :"<+> _).getOrElse("") <> e.map(" ="<+> _).getOrElse("") )
-    case OptionalLabeledPar(l, Some(p), t, e) => "?" <> l <+> ":" <+> parens(p <> 
-        t.map(" :"<+> _).getOrElse("") <> e.map(" ="<+> _).getOrElse("") )
-  }
-
-
-  implicit def showPattern(e: Pattern) : Doc = e match {
-    case RecordPunning(m@ _*) => enclose("{", catList(m.map(showIdentifier), semi) ,"}")
-    case Alias(p,n) => p <+> "as" <+> n
-    case PTypeconstr(n) => "#" <> n
- */

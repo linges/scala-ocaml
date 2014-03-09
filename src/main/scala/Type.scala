@@ -118,7 +118,7 @@ case class TupleType(ts: Type*) extends Type
   * with n parameters, denotes the application of the n-ary type constructor 
   * typeconstr to the types typexpr1 through typexprn.
   */
-case class TypeConstr(v : Name, args: Type*) extends Type
+case class TypeConstr(v : ExtendedName, args: Type*) extends Type
 
 /**
   * The type expression typexpr as 'ident denotes the same type as typexpr, 
@@ -323,15 +323,17 @@ trait TypeParser extends RegexParsers with Parsers {
   lazy val tparentheses: Parser[Type] = "(" ~> typeexpr <~ ")"
 
   lazy val typconstr : Parser[Type] = 
-    name ^^ { case n => TypeConstr(n)} |
-    lvlt1 ~ name ^^ { case ts~n => TypeConstr(n, ts)} |
-    ("(" ~> typeexpr ~ repsep(typeexpr, ",") <~ ")") ~ name ^^ { case t~ts~n => TypeConstr(n, (t::ts):_*)}
+    ("(" ~> (typeexpr <~ ",") ~ repsep(typeexpr, ",") <~ ")") ~ extendedname ^^
+          { case t~ts~n => TypeConstr(n, (t::ts):_*)} |
+    lvlt1 ~ extendedname ^^ { case ts~n => TypeConstr(n, ts)} 
 
+  lazy val simpletypeconstr = 
+    extendedname ^^ { case n => TypeConstr(n)} 
   lazy val typeexpr = lvlt0
 
   lazy val lvlt0 = typconstr | lvlt1 //typ constr
   lazy val lvlt1 = lvlt2 // *
   lazy val lvlt2 = lvlt3 // ->
   lazy val lvlt3 = lvlt4 // as
-  lazy val lvlt4 = tparentheses
+  lazy val lvlt4 = simpletypeconstr | tparentheses 
 }
