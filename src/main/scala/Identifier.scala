@@ -45,7 +45,7 @@ trait IdentifierPrettyPrinter {
 trait IdentifierParser extends RegexParsers with Parsers {
   self: OCamlParser =>
 
-  def name: Parser[Name] = (rep1sep(capitalizedident, ".") <~ ".").? ~ lowercaseident ^^
+  lazy val name: Parser[Name] = (rep1sep(capitalizedident, ".") <~ ".").? ~ lowercaseident ^^
   { case path ~ s => Name(s,path.getOrElse(Nil)) }
 
   lazy val extendedname = ( extendedmodulepath <~ "." ).? ~ lowercaseident ^^
@@ -59,24 +59,24 @@ trait IdentifierParser extends RegexParsers with Parsers {
     rep ("." ~> extendedmodulename) ^^
   { case n ~ es => ExtendedModulePath(n, es) }
 
-  def valuepath: Parser[Name] = (rep1sep(capitalizedident, ".") <~ ".").? ~ 
+  lazy val valuepath: Parser[Name] = (rep1sep(capitalizedident, ".") <~ ".").? ~ 
    valuename ^^
   { case path ~ s => Name(s,path.getOrElse(Nil)) }
 
-  def constrpath: Parser[Name] = (rep1sep(capitalizedident, ".") <~ ".").? ~ 
+  lazy val constrpath: Parser[Name] = (rep1sep(capitalizedident, ".") <~ ".").? ~ 
   capitalizedident  ^^
   { case path ~ s => Name(s,path.getOrElse(Nil)) }
 
-  val valuename = (lowercaseident | operatorname)
-  val operatorname = "(" ~> (infixop | prefixsymbol) <~")" ^^ { case s => "("+s+")" }
+  lazy val valuename = (lowercaseident | operatorname)
+  lazy val operatorname = "(" ~> (infixop | prefixsymbol) <~")" ^^ { case s => "("+s+")" }
 
-  def ident: Parser[String] =  """[a-zA-Z_][a-zA-Z0-9_']*""".r into checkKeyword
-  def lowercaseident: Parser[String] =  """[a-z_][a-zA-Z0-9_']*""".r into checkKeyword
-  def capitalizedident: Parser[String] =   """[A-Z][a-zA-Z0-9_']*""".r into checkKeyword
+  lazy val ident: Parser[String] =  """[a-zA-Z_][a-zA-Z0-9_']*""".r into checkKeyword
+  lazy val lowercaseident: Parser[String] =  """[a-z_][a-zA-Z0-9_']*""".r into checkKeyword
+  lazy val capitalizedident: Parser[String] =   """[A-Z][a-zA-Z0-9_']*""".r into checkKeyword
 
-  val labelname = """[a-z_][a-zA-Z0-9_']*""".r into checkKeyword
+  lazy val labelname = """[a-z_][a-zA-Z0-9_']*""".r into checkKeyword
 
-  def keyword = 
+  lazy val keyword = 
     (keywords.map(_ + "\\b") ++
     keysymbols).mkString("", "|", "").r
 

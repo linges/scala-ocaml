@@ -142,12 +142,12 @@ trait PatternPrettyPrinter {
 trait PatternParser extends RegexParsers with Parsers {
   self: OCamlParser =>
 
-  def simplepattern: Parser[Pattern] = constant | pvar | arrayp | underscore | listp |
-                                       recordp | typeconstrp 
-  val underscore = "_" ^^ { _ => Underscore }
+  def simplepattern: Parser[Pattern] = constant |  pvar | arrayp | listp |
+                                       recordp | typeconstrp | constrp
   def pattern: Parser[Pattern] = lvlp0 
   def pvar : Parser[Pattern] = lowercaseident ^^ { PVar(_) }
 
+  lazy val constrp = constrpath ^^ { case f => ConstrPattern(f)} 
   lazy val arrayp: Parser[Pattern] = "[|" ~> rep1sep(pattern, ";") <~ (";" ?) <~ "|]" ^^
                             { case l => ArrayPattern(l:_*) }
   lazy val listp: Parser[Pattern] = "[" ~> rep1sep(pattern, ";") <~ (";" ?) <~ "]" ^^
@@ -163,7 +163,7 @@ trait PatternParser extends RegexParsers with Parsers {
 
   lazy val parenthesesp = "(" ~> pattern <~ ")"
 
-  lazy val constrp = constrpath ~ rep(lvlp1) ^^ { case f ~ l => ConstrPattern(f, l:_*)}
+  lazy val constrapp = constrpath ~ lvlp1 ^^ { case f ~ l => ConstrPattern(f, l)} 
 
   lazy val recordp = "{" ~> rep1sep(recordFieldp, ";") <~ "}" ^^
                               { case l => PRecord(l.toMap) }
@@ -174,7 +174,7 @@ trait PatternParser extends RegexParsers with Parsers {
   lazy val typeconstrp = "#" ~> extendedname ^^ { case n => PTypeconstr(n) } 
   lazy val polyvariantpattern = "`" ~> capitalizedident ~  pattern ^^ { case n~p => PolyVariantPattern(n, p) } 
 
-  lazy val lvlp0 = constrp | polyvariantpattern | lvlp1
+  lazy val lvlp0 = constrapp | polyvariantpattern | lvlp1
   lazy val lvlp1 = listop | lvlp2
   lazy val lvlp2 = tuplep | lvlp3
   lazy val lvlp3 = orpattern | lvlp4
@@ -182,16 +182,17 @@ trait PatternParser extends RegexParsers with Parsers {
   lazy val lvlp5 = simplepattern | parenthesesp
 
 
-  lazy val patternmatching = ((("|"?) ~> pattern)  ~ ("->" ~> expr) into withguard) ~
-                            rep(matching|matchingwithguard) ^^ { case pm~pms => pm::pms}
+  lazy val patternmatching :Parser[List[PatternMatching]] = firstmatching ~
+        rep(matching|matchingwithguard) ^^ { case pm~pms => pm::pms}
 
-  def withguard(pe:Pattern~Expr) : Parser[PatternMatching] =  ("when" ~> expr) ^^
-                               { case g => MatchingWithGuard(pe._1, pe._2 ,g) } | 
-                               success(Matching(pe._1,pe._2))
+
+  lazy val firstmatching = ("|".? ~> pattern)  ~ ("->" ~> expr) ^^ { case p~e => Matching(p,e) } |
+                           ("|".? ~> pattern) ~ ("when" ~> expr) ~ ("->" ~> expr) ^^
+                               { case p~e~g => MatchingWithGuard(p,e,g) }
 
   lazy val matching = ("|" ~> pattern)  ~ ("->" ~> expr) ^^ { case p~e => Matching(p,e) } 
 
-  lazy val matchingwithguard = ("|" ~> pattern)  ~ ("->" ~> expr) ~ ("when" ~> expr) ^^
+  lazy val matchingwithguard = ("|" ~> pattern) ~ ("when" ~> expr) ~ ("->" ~> expr) ^^
                                { case p~e~g => MatchingWithGuard(p,e,g) }
 
   lazy val parameter : Parser[Parameter] = pattern |  

@@ -61,6 +61,7 @@ trait ConstantParser extends RegexParsers with Parsers {
     """-?(\d+\.\d*|\.\d+)([Ee](-|\+)?\d+)?""".r ^^ {
      d => OFloat(d.toDouble)
   }
+
   lazy val unit: Parser[Unit.type] = """\(\)""".r ^^ { _ => Unit } //TODO
   lazy val otrue: Parser[True.type] = """true""".r ^^ { _ => True }
   lazy val ofalse: Parser[False.type] = """False""".r ^^ { _ => False }

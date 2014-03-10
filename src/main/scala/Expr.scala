@@ -301,6 +301,8 @@ case class SelfCopy(update: Map[String, Expr]) extends Expr
   */
 case class Object(body: ClassBody) extends Expr 
 
+//TODO lazy assert
+
 trait Argument 
 case class LabeledArg(name: String, e: Option[Expr] = None) extends Argument
 case class OptionalLabeledArg(name: String, e: Option[Expr] = None) extends Argument
@@ -321,7 +323,7 @@ trait ExprPrettyPrinter {
     case Fun(args,e,None)     => parens("fun" <+> catList(args.map(showParameter), "") <+> "->" <+> e)
     case Fun(args,e,Some(g))  => parens("fun" <+> catList(args.map(showParameter), "") <+>
         "when"<+> g <+> "->" <+> e)
-    case Function(ps@ _*)     => "function" <+> lsep(ps.map(showPatternMatching), line)
+    case Function(ps@ _*)     => "function" <+> lsep(ps.map(showPatternMatching), "")
     case Var(v)               => v
     case OList(l@ _*)         => brackets( catList(l.map(showExpr), semi) )
     case IfThenElse(c, t, e)  => "if" <+> showExpr(c) <+> "then" <>
@@ -383,15 +385,14 @@ trait ExprPrettyPrinter {
         t.map(" :"<+> _).getOrElse("") <> t2.map(" :>"<+> _).getOrElse("") <+> "=" <+> e
   }
 }
-
+//TODO test performance 
 trait ExprParser extends RegexParsers with Parsers {
   self: OCamlParser =>
 
 
-
   lazy val simpleexpr: Parser[Expr] =  list | constant | record | vari | array | forto |
                                        fordown | whiledone | beginend | onew | tagged |
-                                       omatch | ascription | coercion | recordcopy 
+                                       omatch | coercion | ascription | recordcopy | oobject
 
   lazy val ascription: Parser[Expr] = ("(" ~> expr <~ ":") ~ typeexpr <~ ")" ^^ { case e~t => Ascription(e,t) }
 
@@ -460,7 +461,6 @@ trait ExprParser extends RegexParsers with Parsers {
 
   lazy val instvarassign: Parser[Expr] = (lowercaseident <~ "<-") ~ expr ^^ { case n~e => AssignInstVar(n,e) }
 
-  lazy val parentheses: Parser[Expr] = "(" ~> expr <~ ")"
   lazy val sequence  = (lvl2 <~ ";")  ~ repsep(lvl2, ";") ^^ { case e~l => Sequence(e::l:_*) }
 
   lazy val letin: Parser[LetIn] = ("let" ~> rep1sep(letbinding, "and") <~ "in") ~ expr ^^
@@ -480,26 +480,11 @@ trait ExprParser extends RegexParsers with Parsers {
 
   lazy val otry : Parser[Expr] = ("try" ~> expr <~ "with") ~ patternmatching ^^ { case e~ps => Try(e, ps:_*) }
 
-  def fun : Parser[Fun] = "fun" ~> rep(parameter) ~ (("when" ~> expr).?) ~ ("->" ~> expr) ^^ {case ps~g~e => Fun(ps,e,g) }
- 
-  //We use this do represent priorities.
-  //Higher level means higher priority.
-  //It has the nice side effect that the compiler forbids unwanted recursion,
-  //if we don't specify a type for the parser.
-  lazy val lvl0 = letin | letrecin | otry | lvl1 | fun
-  lazy val lvl1 = sequence | lvl2
-  lazy val lvl2 = ifthenelse | ifthen | lvl3
-  lazy val lvl3 = instvarassign | lvl4 // <- :=
-  lazy val lvl4 = tuple | lvl5 
-  lazy val lvl5 = binop | lvl6
-  lazy val lvl6 = neg | lvl7 //(prefix)
-  lazy val lvl7 = app | constr | lvl8
-  lazy val lvl8 = (lvl9 into selection) into methodcall
-  lazy val lvl9 = prefix | lvl10
-  lazy val lvl10 = (simpleexpr | parentheses) into methodcall
+  lazy val fun : Parser[Fun] = "fun" ~> rep(parameter) ~ (("when" ~> expr).?) ~ ("->" ~> expr) ^^ {case ps~g~e => Fun(ps,e,g) }
 
-  lazy val expr = lvl0 
+  lazy val function = "function" ~> patternmatching ^^ {case ps => Function(ps:_*) }
 
+  lazy val oobject = "object" ~> classbody <~ "end" ^^{ case cb => Object(cb) }
 
 
   lazy val app = lvl8 ~ rep1(arg) ^^ { case f ~ l => App(f, l.head, l.tail :_*)}
@@ -512,27 +497,33 @@ trait ExprParser extends RegexParsers with Parsers {
 
 
 
-// case class FunBinding(name : String, args: List[Parameter], e: Expr, t: Option[Type] = None, t2: Option[Type] = None) extends LetBinding 
   lazy val letbinding: Parser[LetBinding] = binding | funbinding
   lazy val binding: Parser[Binding] = (pattern <~ "=") ~ expr ^^ { case p~e => Binding(p,e) } 
-  //TODO typexpr
-  lazy val funbinding: Parser[FunBinding] = valuename ~ (parameter *) ~  ( "=" ~> expr) ^^ { case n~ps~e => FunBinding(n, ps, e) } 
-  /*
-    case Function(ps@ _*)     => "function" <+> lsep(ps.map(showPatternMatching), line)
-    case Object(b)            => "object" <+> b <@> "end"
-    case Constr(n)            => n
-    case Constr(n, l@ _*)     => n <> list(l.toList, "", showExpr)
-    case RecordCopy(e,m)      => enclose("{", e <+> "with" <+>
-        catList(m.map{
-          case (s,t)          => s <+> "=" <+> t }.toList, semi)
-        ,"}")
-    case Ascription(e,t)      => parens(e<+>":"<+>t)
-    case MethodCall(e, s)     => e <+> "#" <+> s
-    case Coercion(n, None, t2) => parens(n <+> ":>" <+> t2)
-    case Coercion(n, Some(t), t2) => parens(n <+> ":" <+> t <+> ":>" <+> t2)
 
-   */
-  //Shunting-yard algorithm TODO associative 
+  lazy val funbinding: Parser[FunBinding] = valuename ~ (parameter *) ~ 
+  (":" ~> typeexpr).? ~ (":>" ~> typeexpr).? ~
+  ( "=" ~> expr) ^^ { case n~ps~t~t2~e => FunBinding(n, ps, e, t, t2) }
+ 
+  //We use this do represent priorities.
+  //Higher level means higher priority.
+  //It has the nice side effect that the compiler forbids unwanted recursion,
+  //if we don't specify a type for the parser.
+  lazy val lvl0 = letrecin | letin | otry  | function | fun | lvl1
+  lazy val lvl1 = sequence | lvl2 
+  lazy val lvl2 = ifthenelse | ifthen | lvl3
+  lazy val lvl3 = instvarassign | lvl4 // <- :=
+  lazy val lvl4 = tuple | lvl5 
+  lazy val lvl5 = binop | lvl6 
+  lazy val lvl6 = neg | lvl7 //(prefix)
+  lazy val lvl7 = constr | app | lvl8
+  lazy val lvl8 = (lvl9 into selection) into methodcall
+  lazy val lvl9 =  prefix | lvl10
+  lazy val lvl10 = (parentheses | simpleexpr) into methodcall
+
+  lazy val parentheses: Parser[Expr] = "(" ~> expr <~ ")"
+  lazy val expr = lvl0  
+
+  //Shunting-yard algorithm
   lazy val binop = lvl6 ~ rep1(infixop ~ lvl6) ^^ {
     case x ~ xs =>
       var input = new Queue ++= (x :: (xs.flatMap({ case a ~ b => List(a, b) })))
@@ -542,7 +533,10 @@ trait ExprParser extends RegexParsers with Parsers {
       while (!input.isEmpty) {
         val o1 = input.dequeue
         if (isOp) {
-          while (!ops.isEmpty && prec(o1) <= prec(ops.head)) {
+          while (!ops.isEmpty && 
+            (prec(o1) == prec(ops.head) && isLeftAsso(o1) ||
+             prec(o1) < prec(ops.head))
+            ) {
             clearStack(out, ops)
           }
           ops.push(o1.asInstanceOf[String])
@@ -566,8 +560,68 @@ trait ExprParser extends RegexParsers with Parsers {
 
     }
 
-  //TODO precedences and associativity
-  private def prec(op: Any): Int = op match {
-    case _ => 0
+  private def isLeftAsso(op: Any): Boolean = op.asInstanceOf[String] match {
+    case "lsl"                   => false
+    case "lsr"                   => false
+    case "asr"                   => false
+    case "mod"                   => true
+    case "land"                  => true
+    case "lor"                   => true
+    case "lxor"                  => true
+    case "::"                    => false
+    case "!="                    => true
+    case "&"                     => false
+    case "&&"                    => false
+    case "or"                    => false
+    case "||"                    => false
+                                    
+    case x if x.startsWith("**") => false
+    case x if x.startsWith("*")  => true
+    case x if x.startsWith("/")  => true
+    case x if x.startsWith("%")  => true
+    case x if x.startsWith("+")  => true
+    case x if x.startsWith("-")  => true
+    case x if x.startsWith("@")  => false
+    case x if x.startsWith("^")  => false
+    case x if x.startsWith("=")  => true
+    case x if x.startsWith("<")  => true
+    case x if x.startsWith(">")  => true
+    case x if x.startsWith("|")  => true
+    case x if x.startsWith("&")  => true
+    case x if x.startsWith("$")  => true
+    case _                       => false
+  }
+
+  private def prec(op: Any): Int = op.asInstanceOf[String] match {
+    case "lsl"                   => 8
+    case "lsr"                   => 8
+    case "asr"                   => 8
+    case "mod"                   => 7
+    case "land"                  => 7
+    case "lor"                   => 7
+    case "lxor"                  => 7
+    case "::"                    => 5
+    case "!="                    => 3
+    case "&"                     => 2
+    case "&&"                    => 2
+    case "or"                    => 1
+    case "||"                    => 1
+
+    case x if x.startsWith("**") => 8
+    case x if x.startsWith("*")  => 7
+    case x if x.startsWith("/")  => 7
+    case x if x.startsWith("%")  => 7
+    case x if x.startsWith("+")  => 6
+    case x if x.startsWith("-")  => 6
+    case x if x.startsWith("@")  => 4
+    case x if x.startsWith("^")  => 4
+    case x if x.startsWith("=")  => 3
+    case x if x.startsWith("<")  => 3
+    case x if x.startsWith(">")  => 3
+    case x if x.startsWith("|")  => 3
+    case x if x.startsWith("&")  => 3
+    case x if x.startsWith("$")  => 3
+    case _                       => 0
+
   }
 }

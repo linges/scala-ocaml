@@ -1,5 +1,12 @@
 package scalaocaml
 
+import scala.util.parsing.combinator.Parsers
+import scala.util.parsing.combinator.RegexParsers
+import scala.util.parsing.combinator.Parsers
+import scala.util.matching.Regex
+import scala.language.postfixOps
+import scala.language.implicitConversions
+
 /**
   * Class types are the class-level equivalent of type expressions: 
   * they specify the general shape and type properties of classes.
@@ -334,4 +341,10 @@ trait ClassPrettyPrinter {
     case ClassTypeFunctionArg(t, label, op) =>
         (if(op) "?" else "") <> label.map(value(_) <> ": ").getOrElse("") <> t <+> "->"
   }
+}
+
+trait ClassParser extends RegexParsers with Parsers {
+  self: OCamlParser =>
+
+  lazy val classbody = failure("NYI")
 }
