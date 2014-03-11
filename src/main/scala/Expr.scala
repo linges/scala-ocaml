@@ -437,8 +437,8 @@ trait ExprParser extends RegexParsers with Parsers {
   lazy val ifthen: Parser[Expr] = ("if" ~> expr <~ "then")  ~ lvl2 ^^
                                  { case c ~ t => IfThen(c,t) }
 
-  lazy val tuple = (lvl5 <~ ",") ~ repsep(lvl5, ",")  ^^
-                             { case e~l => Tuple(e::l:_*) } 
+  def tuple(e: Expr) = "," ~> repsep(lvl5, ",")  ^^
+                             { case l => Tuple(e::l:_*) } | success(e)
 
   lazy val tagged = "`" ~> ident ~ expr ^^ { case i~e => TaggedExpr(i,e) }
 
@@ -461,7 +461,7 @@ trait ExprParser extends RegexParsers with Parsers {
 
   lazy val instvarassign: Parser[Expr] = (lowercaseident <~ "<-") ~ expr ^^ { case n~e => AssignInstVar(n,e) }
 
-  lazy val sequence  = (lvl2 <~ ";")  ~ repsep(lvl2, ";") ^^ { case e~l => Sequence(e::l:_*) }
+  def sequence(e: Expr)  =  ";" ~> repsep(lvl2, ";") ^^ { case l => Sequence(e::l:_*) } | success(e) 
 
   lazy val letin: Parser[LetIn] = ("let" ~> rep1sep(letbinding, "and") <~ "in") ~ expr ^^
                              { case l~e => LetIn(l,e) }
@@ -486,11 +486,13 @@ trait ExprParser extends RegexParsers with Parsers {
 
   lazy val oobject = "object" ~> classbody <~ "end" ^^{ case cb => Object(cb) }
 
-
-  lazy val app = lvl8 ~ rep1(arg) ^^ { case f ~ l => App(f, l.head, l.tail :_*)}
   lazy val constr = constrpath ~ rep(lvl8) ^^ { case f ~ l => Constr(f, l:_*)}
 
-  lazy val arg : Parser[Argument] = labeledarg | optionallabeledarg | lvl8
+  lazy val app2 = lvl8 ~ rep1(arg) ^^ { case f ~ l => App(f, l.head, l.tail :_*)}
+
+  def app(e:Expr) : Parser[Expr] = (arg ^^ { case a => App(e,a) } into app) | success(e)
+
+  lazy val arg : Parser[Argument] = labeledarg | optionallabeledarg | constr | lvl8
   lazy val labeledarg = ("~" ~>  labelname ~ (":" ~> lvl8).?) ^^ { case l~e => LabeledArg(l,e) }
   lazy val optionallabeledarg = ("?" ~>  labelname ~ (":" ~> lvl8).?) ^^ 
                                 { case l~e => OptionalLabeledArg(l,e) }
@@ -509,23 +511,23 @@ trait ExprParser extends RegexParsers with Parsers {
   //It has the nice side effect that the compiler forbids unwanted recursion,
   //if we don't specify a type for the parser.
   lazy val lvl0 = letrecin | letin | otry  | function | fun | lvl1
-  lazy val lvl1 = sequence | lvl2 
+  lazy val lvl1 = lvl2  into sequence 
   lazy val lvl2 = ifthenelse | ifthen | lvl3
   lazy val lvl3 = instvarassign | lvl4 // <- :=
-  lazy val lvl4 = tuple | lvl5 
-  lazy val lvl5 = binop | lvl6 
+  lazy val lvl4 = lvl5 into tuple
+  lazy val lvl5 = lvl6 into binop
   lazy val lvl6 = neg | lvl7 //(prefix)
-  lazy val lvl7 = constr | app | lvl8
+  lazy val lvl7 = (constr | lvl8) into app
   lazy val lvl8 = (lvl9 into selection) into methodcall
   lazy val lvl9 =  prefix | lvl10
-  lazy val lvl10 = (parentheses | simpleexpr) into methodcall
+  lazy val lvl10 = ( parentheses | simpleexpr) into methodcall
 
   lazy val parentheses: Parser[Expr] = "(" ~> expr <~ ")"
   lazy val expr = lvl0  
 
   //Shunting-yard algorithm
-  lazy val binop = lvl6 ~ rep1(infixop ~ lvl6) ^^ {
-    case x ~ xs =>
+  def binop(x: Expr) = rep1(infixop ~ lvl6) ^^ {
+    case xs =>
       var input = new Queue ++= (x :: (xs.flatMap({ case a ~ b => List(a, b) })))
       val out: Stack[Expr] = new Stack
       val ops: Stack[String] = new Stack
@@ -548,7 +550,7 @@ trait ExprParser extends RegexParsers with Parsers {
       while (!ops.isEmpty) clearStack(out, ops)
       if (out.size != 1) failure("OutputStack should have only one value")
       out.pop
-  }
+  } | success(x)
 
   private def clearStack(out: Stack[Expr], ops: Stack[String]) =
     {
