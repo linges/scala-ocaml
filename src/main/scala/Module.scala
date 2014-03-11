@@ -164,7 +164,8 @@ case class ModuleDefinition(name: String, ce: ModuleExpr, fs: List[(String, Modu
   * all definitions of the structure denoted by module-expr. 
   */
 case class IncludeDef(me: ModuleExpr) extends Definition 
-//TODO external
+
+case class External(name: String, t: Type, externaldec: String) extends Definition
 
 trait ModulePrettyPrinter {
   self: OCamlPrettyPrinter =>
@@ -197,6 +198,7 @@ trait ModulePrettyPrinter {
   }
 
   def showDefinition(e: Definition) : Doc = e match {
+    case External(n,t,c) => "external" <+> n <+> ":" <+> t <+> "=" <+> "\"" <> c <> "\""
     case IncludeDef(me) => "include" <+> me
     case Open(name) => "open" <+> name
     case ctd: ClassTypeDefinition => showClassTypeDefinition(ctd)

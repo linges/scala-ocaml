@@ -322,18 +322,48 @@ trait TypeParser extends RegexParsers with Parsers {
 
   lazy val tparentheses: Parser[Type] = "(" ~> typeexpr <~ ")"
 
-  lazy val typconstr : Parser[Type] = 
+  lazy val typeconstr : Parser[Type] = 
     ("(" ~> (typeexpr <~ ",") ~ repsep(typeexpr, ",") <~ ")") ~ extendedname ^^
-          { case t~ts~n => TypeConstr(n, (t::ts):_*)} |
-    lvlt1 ~ extendedname ^^ { case ts~n => TypeConstr(n, ts)} 
+          { case t~ts~n => TypeConstr(n, (t::ts):_*)} 
+  def singleargconstr(t: Type) : Parser[Type] = 
+    ( extendedname ^^ { case n => TypeConstr(n, t)} into singleargconstr) | success(t)
 
   lazy val simpletypeconstr = 
     extendedname ^^ { case n => TypeConstr(n)} 
-  lazy val typeexpr = lvlt0
 
-  lazy val lvlt0 = typconstr | lvlt1 //typ constr
-  lazy val lvlt1 = lvlt2 // *
-  lazy val lvlt2 = lvlt3 // ->
-  lazy val lvlt3 = lvlt4 // as
-  lazy val lvlt4 = simpletypeconstr | tparentheses 
+  def tupletype(t:Type) = "*" ~> rep1sep(lvlt3, "*") ^^ { case ts => TupleType(t::ts:_*) } |
+                          success(t)
+
+  def astype(t:Type) = "as" ~> "'" ~> ident ^^ { case i => TypeAlias(t,i) } | success(t)
+
+  lazy val simpletypes = simpletypeconstr| typeconstr | simplehashtype
+
+
+  lazy val simplehashtype = "#" ~> name ^^ { case n => HashType(n) }
+
+  lazy val hashtype :Parser[Type] = 
+    ("(" ~> (typeexpr <~ ",") ~ repsep(typeexpr, ",") <~ ")") ~ ("#" ~> name) ^^
+          { case t~ts~n => HashType(n, (t::ts):_*)} 
+
+  def singlearghash(t: Type) :Parser[Type] = 
+    ("#" ~> name ^^ { case n => HashType(n, t) } into singlearghash) |  success(t)
+
+  def functiontype(t: Type) :Parser[Type] = 
+    "->" ~> typeexpr ^^ { case t2 => FunctionType(t,t2) } | success(t)
+
+  lazy val labeledfunctiontype : Parser[Type] = 
+    ("?" ~> lowercaseident <~ ":") ~ (lvlt3 <~ "->") ~ typeexpr ^^
+       { case i~t~t2 => LabeledFunctionType(i, t, t2, true) } |
+    (lowercaseident <~ ":") ~ (lvlt3 <~ "->") ~ typeexpr ^^
+       { case i~t~t2 => LabeledFunctionType(i, t, t2, false) }
+
+
+  lazy val typeexpr : Parser[Type] = lvlt0
+
+  lazy val lvlt0 = lvlt1 into astype // as
+  lazy val lvlt1 = (labeledfunctiontype | lvlt2) into functiontype// ->
+  lazy val lvlt2 = lvlt3 into tupletype //*
+  lazy val lvlt3 = (hashtype | lvlt4) into singlearghash // #
+  lazy val lvlt4 = lvlt5 into singleargconstr // constr
+  lazy val lvlt5 = simpletypes | tparentheses 
 }
