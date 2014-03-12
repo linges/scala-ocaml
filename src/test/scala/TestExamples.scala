@@ -566,7 +566,6 @@ trait TestExamples extends FunSuite {
     """
     compareExpr(result, expect)
   }
-/*
   /**
     * Types and Typedefinition
     */
@@ -579,29 +578,73 @@ trait TestExamples extends FunSuite {
     compareType(result, expect)
   }
 
-  test("exact variant type"){
-    val result = ExactVariantType(TagType("foo", Some(TypeConstr(ExtendedName("a")))), TypeConstr(ExtendedName("bar")))
+
+  test("object type 2"){
+    val result = ObjectType(List("foo" -> int,
+                                 "bar" -> PolymorphType(List("a", "b"), TypeConstr(ExtendedName("test")))) , false)
     val expect = """ 
-    [`foo of a | bar]
+    <foo : int; bar : 'a 'b . test>
+    """
+    compareType(result, expect)
+  }
+
+  test("object type 3"){
+    val result = ObjectType(Nil, false)
+    val expect = """ 
+    <>
+    """
+    compareType(result, expect)
+  }
+
+  test("object type 4"){
+    val result = ObjectType(Nil, true)
+    val expect = """ 
+    <..>
+    """
+    compareType(result, expect)
+  }
+
+  test("exact variant type"){
+    val result = ExactVariantType(None, TagType("Foo", Some(TypeConstr(ExtendedName("a")))), TypeConstr(ExtendedName("bar")))
+    val expect = """ 
+    [`Foo of a | bar]
+    """
+    compareType(result, expect)
+  }
+
+  test("exact variant type 2"){
+    val result = ExactVariantType(Some(int), TagType("Foo", Some(TypeConstr(ExtendedName("a")))), TypeConstr(ExtendedName("bar")))
+    val expect = """ 
+    [int | `Foo of a | bar]
     """
     compareType(result, expect)
   }
 
   test("open variant type"){
-    val result = OpenVariantType(TagType("foo", Some(TypeConstr(ExtendedName("a")))), TypeConstr(ExtendedName("bar")))
+    val result = OpenVariantType(TagType("Foo", Some(TypeConstr(ExtendedName("a")))), TypeConstr(ExtendedName("bar")))
     val expect = """ 
-    [>`foo of a | bar]
+    [>`Foo of a | bar]
     """
     compareType(result, expect)
   }
 
   test("close variant type"){
     val result = CloseVariantType(List(
-      TagTypeFull("foo", Some(List(TypeConstr(ExtendedName("a")),TypeConstr(ExtendedName("b"))))), TypeConstr(ExtendedName("bar"))),
-      Some(List("c", "d"))
+      TagTypeFull("Foo", Some(List(TypeConstr(ExtendedName("a")),TypeConstr(ExtendedName("b"))))), TypeConstr(ExtendedName("bar"))),
+      Some(List("C", "D"))
     )
     val expect = """ 
-    [<`foo of a & b | bar > `c `d]
+    [<`Foo of a & b | bar > `C `D]
+    """
+    compareType(result, expect)
+  }
+
+  test("close variant type 2"){
+    val result = CloseVariantType(List(
+      TagTypeFull("Foo", None))
+    )
+    val expect = """ 
+    [<`Foo]
     """
     compareType(result, expect)
   }
@@ -611,7 +654,7 @@ trait TestExamples extends FunSuite {
     val expect = """ 
     #foo
     """
-    compareType(result, expect)
+    compare(result, expect)
   }
 
   test("type ident"){
@@ -623,13 +666,12 @@ trait TestExamples extends FunSuite {
   }
 
   test("type underscore"){
-    val result = TUnderscore 
+    val result = TypeConstr(ExtendedName("_"))
     val expect = """ 
     _
     """
     compareType(result, expect)
   }
- */
 
   test("function type"){
     val result = FunctionType(LabeledFunctionType("foo", int, string),
@@ -643,7 +685,7 @@ trait TestExamples extends FunSuite {
   test("function type 2"){
     val result = FunctionType(int, FunctionType(int, int))
     val expect = """ 
-    int -> int -> int  
+    (int -> (int -> int))
     """
     compareType(result, expect)
   }
@@ -737,7 +779,6 @@ trait TestExamples extends FunSuite {
     """
     compareType(result, expect)
   }
-/*
 
   test("record type with constraints") {
     val result = TypeDefinition(TypeDef(List(), "point2d", None,
@@ -748,19 +789,20 @@ trait TestExamples extends FunSuite {
     constraint 'a = float
     constraint 'x = b
     """
-    compareType(result, expect)
+    compareDef(result, expect)
   }
- 
+
   test("type with constructor and type-equation") {
     val result = TypeDefinition(TypeDef(List(), "foobar",
       Some(int), 
-      Some(ConstrDeclarations(ConstrDecl("Foo", int, int), 
+      Some(ConstrDeclarations(ConstrDecl("Foo", TupleType(int, int)), 
         ConstrDecl("Bar")))))
     val expect = """
-    type foobar = int = | Foo of int * int | Bar  
+    type foobar = int = | Foo of (int * int) | Bar  
     """
-    compareType(result, expect)
+    compareDef(result, expect)
   }
+
   test("mutable record type") {
     val result = TypeDefinition(TypeDef(
       List(TypeParameter("a",Some(Covariant))),
@@ -773,30 +815,39 @@ trait TestExamples extends FunSuite {
     {mutable sum : float;
       mutable samples : int}
     """
-    compareType(result, expect)
+    compareDef(result, expect)
   }
+
   test("unit type") {
     val result = TypeConstr(ExtendedName("unit"))
     val expect = "unit"
     compareType(result, expect)
   }
-
+ 
   test("polymorphic type") {
     val result = TypeDefinition(TypeDef( 
       List(TypeParameter("a"), TypeParameter("b")), "ref", None,
       Some(TRecord(MutableRecordField("contents", TypeIdent("a"))))))
     val expect = """type ('a, 'b) ref = {mutable contents : 'a}"""
-    compareType(result, expect)
+    compareDef(result, expect)
   }
   /**
     * Exceptions
     */
   test("exception definition"){
-    val result = NewException("Foo", int, string)
+    val result = NewException("Foo", TupleType(int, string))
     val expect = """ 
-    exception Foo of int * string
+    exception Foo of (int * string)
     """
-    compareExpr(result, expect)
+    compareDef(result, expect)
+  }
+
+  test("exception definition 2"){
+    val result = NewException("Foo")
+    val expect = """ 
+    exception Foo 
+    """
+    compareDef(result, expect)
   }
 
   test("alternate name for exception"){
@@ -804,12 +855,14 @@ trait TestExamples extends FunSuite {
     val expect = """ 
     exception Bar = Foo
     """
-    compareExpr(result, expect)
+    compareDef(result, expect)
   }
+
   /**
     * Classes
     */
 
+ /*
 
   test("class type") {
     val result = ClassType(List(),

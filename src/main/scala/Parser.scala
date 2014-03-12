@@ -81,7 +81,7 @@ trait OCamlParser extends RegexParsers with Parsers
         Left("UNEXPECTED ERROR: " + e.getMessage() + "\n" + baos.toString)
     }
   }
-  def definition : Parser[Definition] = let | letrec
-  def all : Parser[Any] = expr | typeexpr | definition | pattern
+  def definition : Parser[Definition] = let | letrec | typedefinition | exceptiondefinition
+  def all : Parser[Any] = expr | definition | pattern | typeexpr 
 }
 

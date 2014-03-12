@@ -33,7 +33,7 @@ case class TypeDefinition(td: TypeDef*) extends Definition with Specification
   * stated in the optional type equation.
   */
 case class TypeDef(tyvars: List[TypeParameter], constr: String, t: Option[Type] = None,
-trep: Option[TypeRepresentation], constraints: List[TypeConstraint] = List()) 
+trep: Option[TypeRepresentation] = None, constraints: List[TypeConstraint] = List()) 
 
 /**
   * The optional type parameters are either one type variable ' ident, 
@@ -175,7 +175,7 @@ abstract class PolymorphicVariantType extends Type
   * The first case is an exact variant type: all possible tags are known, 
   * with their associated types, and they can all be present. Its structure is fully known.
   */
-case class ExactVariantType(ts: TagSpec*) extends PolymorphicVariantType
+case class ExactVariantType(ty: Option[Type], ts: TagSpec*) extends PolymorphicVariantType
 /**
   * The second case is an open variant type, describing a polymorphic variant value: 
   * it gives the list of all tags the value could take, with their associated types. 
@@ -244,9 +244,11 @@ trait TypePrettyPrinter {
     case HashType(n) => parens("#" <+> n)
     case HashType(n, t) => parens(t <+> "#" <+> n)
     case HashType(n, ts@ _*) => parens(list(ts.toList, "", showType) <+> "#" <+> n)
+    case ObjectType(Nil, b) => enclose("<", (if(b) ".." else ""), ">")
     case ObjectType(m, b) => enclose("<", catList(m.map{case (s,t) => s <+> ":" <+> t}, semi)
         <> (if(b) " ;.." else ""), ">")
-    case ExactVariantType(ts@ _*) => brackets(catList(ts.map(showTagSpec), " |")) 
+    case ExactVariantType(None, ts@ _*) => brackets(catList(ts.map(showTagSpec), " |")) 
+    case ExactVariantType(Some(t), ts@ _*) => brackets(t <+> "|" <+> catList(ts.map(showTagSpec), " |")) 
     case OpenVariantType(ts@ _*) => brackets(">" <> catList(ts.map(showTagSpec), " |")) 
     case CloseVariantType(ts, None) => brackets("<" <> catList(ts.map(showTagSpecFull), " |")) 
     case CloseVariantType(ts, Some(ls)) => brackets("<" <> catList(ts.map(showTagSpecFull), " |")
@@ -274,8 +276,8 @@ trait TypePrettyPrinter {
     case TypeDef(tvars, constr, t, tr, cs) => {
       showTypeParameters(tvars) <+> constr <>
       t.map(" =" <+> showType(_)).getOrElse("") <>
-      tr.map(" =" <+> showTypeRepresentation(_)).getOrElse("") <@>
-      lsep(cs.map(showTypeConstraint), linebreak)
+      tr.map(" =" <+> showTypeRepresentation(_)).getOrElse("") <+>
+      lsep(cs.map(showTypeConstraint), "")
     }
   }
  
@@ -336,8 +338,11 @@ trait TypeParser extends RegexParsers with Parsers {
 
   def astype(t:Type) = "as" ~> "'" ~> ident ^^ { case i => TypeAlias(t,i) } | success(t)
 
-  lazy val simpletypes = simpletypeconstr| typeconstr | simplehashtype
+  lazy val simpletypes = simpletypeconstr| typeconstr | simplehashtype | tident | objecttype |
+                         polymorphicvarianttype
 
+
+  lazy val tident = "'" ~> ident ^^ {case i => TypeIdent(i) }
 
   lazy val simplehashtype = "#" ~> name ^^ { case n => HashType(n) }
 
@@ -357,8 +362,41 @@ trait TypeParser extends RegexParsers with Parsers {
     (lowercaseident <~ ":") ~ (lvlt3 <~ "->") ~ typeexpr ^^
        { case i~t~t2 => LabeledFunctionType(i, t, t2, false) }
 
+  lazy val polytype  =
+       rep1("'" ~> ident) ~ "." ~ typeexpr ^^ { case ls~_~t => PolymorphType(ls,t) } |
+       typeexpr
+
+  lazy val methodtype = lowercaseident ~ ":" ~ polytype ^^ { case l~_~p => (l,p) }
 
   lazy val typeexpr : Parser[Type] = lvlt0
+
+  lazy val objecttype = "<" ~> ( 
+    rep1sep(methodtype, ";") ~ (";"~".."| ";").? ^^
+     { case mts~el => 
+       el match {
+         case Some(";"~"..") => ObjectType(mts, true)
+         case _ => ObjectType(mts, false)
+       }
+     } |
+    ".." ^^ { case _ => ObjectType(Nil, true) } |
+     success(ObjectType(Nil, false))
+  )  <~ ">"
+
+  lazy val polymorphicvarianttype = "[" ~>(
+        ">" ~> repsep(tagspec, "|") ^^ { case ts => OpenVariantType(ts:_*) } |
+        ("<" ~ ("|".?)) ~> repsep(tagspecfull, "|") ~ (">" ~> rep1("`" ~> capitalizedident)).? ^^
+           { case ts~tn => CloseVariantType(ts, tn) } |
+         (typeexpr <~ "|").? ~ rep1sep(tagspec, "|") ^^ { case t~ts => ExactVariantType(t, ts:_*) }
+    ) <~ "]"
+
+  lazy val tagtype = "`" ~> capitalizedident ~ ( "of" ~> typeexpr ).? ^^
+                     { case i~t => TagType(i, t) }
+
+  lazy val tagspec = tagtype | typeexpr
+  lazy val tagspecfirst = tagspec
+
+  lazy val tagspecfull = "`" ~> capitalizedident ~ (("of" ~ ("&").?) ~> rep1sep(typeexpr, "&") ).? ^^
+                         { case i~ts => TagTypeFull(i, ts) } | typeexpr
 
   lazy val lvlt0 = lvlt1 into astype // as
   lazy val lvlt1 = (labeledfunctiontype | lvlt2) into functiontype// ->
@@ -366,4 +404,52 @@ trait TypeParser extends RegexParsers with Parsers {
   lazy val lvlt3 = (hashtype | lvlt4) into singlearghash // #
   lazy val lvlt4 = lvlt5 into singleargconstr // constr
   lazy val lvlt5 = simpletypes | tparentheses 
+
+
+
+  lazy val typedefinition = ("type" ~> rep1sep(typedef, "and") ) ^^
+                             { case l => TypeDefinition(l:_*) }
+// case class TypeDef(tyvars: List[TypeParameter], constr: String, t: Option[Type] = None,
+// trep: Option[TypeRepresentation], constraints: List[TypeConstraint] = List()) 
+
+  lazy val typedef = typeparams ~ lowercaseident ~ ("=" ~> typeexpr).? ~ typerepresentation.? ~
+  rep(typeconstraint) ^^
+  { case tp~n~t~tr~cs => TypeDef(tp, n, t, tr, cs) }
+
+  lazy val typerepresentation = trecord | constrdeclarations 
+
+  lazy val trecord = "=" ~ "{" ~> (rep1sep(recordfield, ";") ^^
+    {case fs => TRecord(fs:_*)}) <~ (";".?) <~ "}"
+
+  lazy val recordfield = 
+    "mutable" ~> lowercaseident ~ ":" ~ polytype ^^ { case l~_~pt => MutableRecordField(l, pt) } |
+    lowercaseident ~ ":" ~ polytype ^^ { case l~_~pt => ImmutableRecordField(l, pt) }
+
+  lazy val constrdeclarations = 
+    ("=" ~ ("|".?)) ~> rep1sep(constrdecl, "|") ^^ { case cd => ConstrDeclarations(cd:_*) }
+
+  lazy val constrdecl = (capitalizedident | "()") ~ "of" ~ rep1sep(typeexpr, "*") ^^
+                        { case n~_~ts => ConstrDecl(n, ts:_*) } |
+                        (capitalizedident | "()") ^^ { case n => ConstrDecl(n) } 
+
+  lazy val typeconstraint = "constraint" ~> "'" ~> ident ~ "=" ~ typeexpr ^^ 
+    { case i~_~t => TypeConstraint(i,t) }
+
+  lazy val typeparams = "(" ~> rep1sep(typeparam, ",") <~ ")" | 
+     typeparam ^^ { List(_) } | success(Nil)
+
+  lazy val typeparam = (contravariant|covariant).? ~ "'" ~ ident ^^
+    { case v~_~i => TypeParameter(i, v) }
+
+  lazy val covariant = "+" ^^^ { Covariant }
+  lazy val contravariant = "-" ^^^ { Contravariant } 
+
+  lazy val exceptiondefinition =
+    "exception" ~> capitalizedident ~ ("of" ~> rep1sep(typeexpr, "*")) ^^
+       { case i~ts => NewException(i, ts:_*) } |
+    "exception" ~> capitalizedident ~ "=" ~ constrpath ^^
+       { case i~_~c => AlternateNameException(i,c) } |
+    "exception" ~> capitalizedident  ^^
+       { case i => NewException(i) } 
+
 }
