@@ -13,7 +13,7 @@ case class ExtendedModuleName(moduleName: String, paths : List[ExtendedModulePat
 case class ExtendedModulePath(name: ExtendedModuleName, l: List[ExtendedModuleName] = List()) extends Identifier
 
 case class ExtendedName(id: String, path: Option[ExtendedModulePath] = None) extends Identifier
-case class Name(id: String, path: List[String]) extends Identifier
+case class Name(id: String, path: List[String]) extends Identifier with DirectiveArgument
 object Name
 {
   def apply(s: String) : Name =

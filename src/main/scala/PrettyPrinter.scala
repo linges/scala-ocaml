@@ -11,7 +11,8 @@ object OCamlPrettyPrinter extends OCamlPrettyPrinter
 trait OCamlPrettyPrinter extends PrettyPrinter with ExprPrettyPrinter 
     with TypePrettyPrinter with PatternPrettyPrinter
     with ClassPrettyPrinter with ModulePrettyPrinter
-    with ConstantPrettyPrinter with IdentifierPrettyPrinter{
+    with ConstantPrettyPrinter with IdentifierPrettyPrinter
+    with TopLevelSystemPrettyPrinter{
   
   def pretty(t: Any): String = t match {
     case e: Type => super.pretty(showType(e))
@@ -23,6 +24,7 @@ trait OCamlPrettyPrinter extends PrettyPrinter with ExprPrettyPrinter
     case e: ModuleType => super.pretty(showModuleType(e))
     case e: ModuleExpr => super.pretty(showModuleExpr(e))
     case e: Identifier => super.pretty(showIdentifier(e))
+    case e: TopLevelInput => super.pretty(showTopLevelInput(e))
     case e => pretty_any(e)
   }
 

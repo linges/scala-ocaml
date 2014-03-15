@@ -18,7 +18,7 @@ case class Let(lb: LetBinding*) extends Definition
 case class LetRec(lb: LetBinding*) extends Definition  
 
 
-trait Expr extends Argument with ModuleItem
+trait Expr extends Argument with ModuleItem with TopLevelPhrase
 
 /**
   * An expression consisting in an access path evaluates

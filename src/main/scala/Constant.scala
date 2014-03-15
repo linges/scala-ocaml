@@ -16,13 +16,13 @@ import scala.language.implicitConversions
   * A pattern consisting in a constant matches the values that are equal to this constant.
   */
 sealed abstract class Constant extends Expr with Pattern 
-case class OInt(n: Int) extends Constant
+case class OInt(n: Int) extends Constant with DirectiveArgument
 case class OFloat(n: Double) extends Constant
 sealed abstract class OBoolean extends Constant
 case object True extends OBoolean
 case object False extends OBoolean
 case class OChar(c: Char) extends Constant 
-case class OString(s: String) extends Constant
+case class OString(s: String) extends Constant with DirectiveArgument
 case object Unit extends Constant
 case object EmptyList extends Constant 
 case object EmptyArray extends Constant 

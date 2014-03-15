@@ -135,7 +135,7 @@ case class FunctorApp(me1: ModuleExpr, me2: ModuleExpr) extends ModuleExpr
 case class MEAscription(me: ModuleExpr, mt: ModuleType) extends ModuleExpr
 trait ModuleItem
 
-trait Definition extends ModuleItem
+trait Definition extends ModuleItem with TopLevelPhrase
 /**
   * A definition for a module type is written module type modtype-name =  module-type. 
   * It binds the name modtype-name to the module type denoted by the expression module-type.
