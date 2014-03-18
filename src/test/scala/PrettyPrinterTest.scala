@@ -20,6 +20,8 @@ class PrettyPrinterTest extends FunSuite with TestExamples
 
   def compareType(result: Type, expect: String) = compare(result, expect)
   def compareExpr(result: Expr, expect: String) = compare(result, expect)
+  def compareClassExpr(result: ClassExpr, expect: String) = compare(result, expect)
+  def compareClassType(result: ClassType, expect: String) = compare(result, expect)
   def compareDef(result: Definition, expect: String) = compare(result, expect)
 
   def cleanString(s:String) = 

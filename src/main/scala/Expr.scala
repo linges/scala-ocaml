@@ -488,8 +488,6 @@ trait ExprParser extends RegexParsers with Parsers {
 
   lazy val constr = constrpath ~ rep(lvl8) ^^ { case f ~ l => Constr(f, l:_*)}
 
-  lazy val app2 = lvl8 ~ rep1(arg) ^^ { case f ~ l => App(f, l.head, l.tail :_*)}
-
   def app(e:Expr) : Parser[Expr] = (arg ^^ { case a => App(e,a) } into app) | success(e)
 
   lazy val arg : Parser[Argument] = labeledarg | optionallabeledarg | constr | lvl8

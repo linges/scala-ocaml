@@ -24,8 +24,6 @@ object Name
 }
 
 
-
-
 trait IdentifierPrettyPrinter {
   self : OCamlPrettyPrinter =>
 
@@ -40,7 +38,6 @@ trait IdentifierPrettyPrinter {
     case ExtendedModuleName(n, l) => n <+> catList(l.map(x => parens(showIdentifier(x))), "")
   }
 }
-
 
 trait IdentifierParser extends RegexParsers with Parsers {
   self: OCamlParser =>

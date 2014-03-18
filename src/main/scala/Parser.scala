@@ -34,6 +34,39 @@ trait OCamlParser extends RegexParsers with Parsers
     }
   }
 
+
+  def parseClassType(in: String): Either[String, ClassType] = {
+    try {
+      parseAll(classtype, new ParserString(in)) match {
+        case Success(result, _) => Right(result)
+        case NoSuccess(msg, in1) =>
+          Left(msg)
+      }
+    } catch {
+      //should no longer happen
+      case e: Throwable =>
+        val baos = new ByteArrayOutputStream()
+        e.printStackTrace(new PrintStream(baos))
+        Left("UNEXPECTED ERROR: " + e.getMessage() + "\n" + baos.toString)
+    }
+  }
+
+  def parseClassExpr(in: String): Either[String, ClassExpr] = {
+    try {
+      parseAll(classexpr, new ParserString(in)) match {
+        case Success(result, _) => Right(result)
+        case NoSuccess(msg, in1) =>
+          Left(msg)
+      }
+    } catch {
+      //should no longer happen
+      case e: Throwable =>
+        val baos = new ByteArrayOutputStream()
+        e.printStackTrace(new PrintStream(baos))
+        Left("UNEXPECTED ERROR: " + e.getMessage() + "\n" + baos.toString)
+    }
+  }
+
   def parseDef(in: String): Either[String, Definition] = {
     try {
       parseAll(definition, new ParserString(in)) match {
@@ -66,6 +99,8 @@ trait OCamlParser extends RegexParsers with Parsers
     }
   }
 
+
+
   def parseAny(in: String): Either[String, Any] = {
     try {
       parseAll(all, new ParserString(in)) match {
@@ -81,7 +116,9 @@ trait OCamlParser extends RegexParsers with Parsers
         Left("UNEXPECTED ERROR: " + e.getMessage() + "\n" + baos.toString)
     }
   }
-  def definition : Parser[Definition] = let | letrec | typedefinition | exceptiondefinition
-  def all : Parser[Any] = expr | definition | pattern | typeexpr 
+  
+  def definition : Parser[Definition] = let | letrec | typedefinition | exceptiondefinition | 
+                                        classdefinition
+  def all : Parser[Any] =  definition | pattern | typeexpr | classtype 
 }
 

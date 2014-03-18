@@ -25,7 +25,7 @@ abstract class ClassBodyType
   * is equivalent to the parametric class type bound to the name classtype-path, 
   * in which type parameters have been instantiated to respectively typexpr1, …typexprn.
   */
-case class SimpleClassBodyType(targs: List[Type], classPath: ExtendedName) extends ClassBodyType
+case class SimpleClassBodyType(targs: List[Type], classPath: Name) extends ClassBodyType
 
 /**
   * The class type expression object [( typexpr )]  {class-field-spec} end is the type 
@@ -42,7 +42,7 @@ abstract class ClassFieldSpec
   * The instance variable and method types from class-body-type are added 
   * into the current class type.
   */
-case class InheirtSpec(c: ClassBodyType) extends ClassFieldSpec
+case class InheritSpec(c: ClassType) extends ClassFieldSpec
 /**
   * A specification of an instance variable is written 
   * val [mutable] [virtual] inst-var-name : typexpr, 
@@ -320,7 +320,7 @@ trait ClassPrettyPrinter {
       "val" <> (if(muta) " mutable" else "") <>
       (if(virt) " virtual" else "") <+>
       name <+> ":" <+> t
-    case InheirtSpec(c) => "inherit" <+> c
+    case InheritSpec(c) => "inherit" <+> c
   }
 
   implicit def showClassBodyType(cbt: ClassBodyType) : Doc = cbt match {
@@ -334,17 +334,137 @@ trait ClassPrettyPrinter {
   }
 
   implicit def showClassType(ct: ClassType) : Doc = ct match {
-    case ClassType(cfs, b) => catList(cfs.map(showClassTypeFunctionArg), empty) <+> b
+    case ClassType(Nil, b) => b
+    case ClassType(cfs, b) => catList(cfs.map(showClassTypeFunctionArg), " ->") <+> "->" <+> b
   }
   
   implicit def showClassTypeFunctionArg(arg: ClassTypeFunctionArg) : Doc = arg match {
     case ClassTypeFunctionArg(t, label, op) =>
-        (if(op) "?" else "") <> label.map(value(_) <> ": ").getOrElse("") <> t <+> "->"
+        (if(op) "?" else "") <> label.map(value(_) <> ": ").getOrElse("") <> t 
   }
 }
 
 trait ClassParser extends RegexParsers with Parsers {
   self: OCamlParser =>
 
-  lazy val classbody = failure("NYI")
+  lazy val classtype = rep(classfunctionarg <~ "->" ) ~ (classbodytype) ^^ 
+                       { case args~b => ClassType(args,b) } |
+                       classbodytype ^^ { case b => ClassType(Nil, b) }
+
+
+  lazy val classfunctionarg = "?" ~> (labelname <~ ":") ~
+                              simpletypes ^^ { case l~t => ClassTypeFunctionArg(t, Some(l), true)} |
+                              (labelname <~ ":") ~
+                              typeexpr ^^ { case l~t => ClassTypeFunctionArg(t, Some(l), false)} |
+                              typeexpr ^^ { ClassTypeFunctionArg(_)}
+
+  lazy val classbodytype : Parser[ClassBodyType] = normalclassbodytype | simpleclassbodytype  
+
+  lazy val simpleclassbodytype = ("[" ~> rep1sep(typeexpr, ",") <~ "]")  ~ name ^^
+                                 {case ts~n => SimpleClassBodyType(ts,n)} |
+                                 name ^^ { case n => SimpleClassBodyType(Nil, n) }
+
+  lazy val normalclassbodytype = "object" ~> ("(" ~> typeexpr <~ ")").? ~ rep(classfieldspec) <~
+                                 "end" ^^ { case t~cs => NormalClassBodyType(t, cs:_*) }
+
+  lazy val classfieldspec = inheritspec | valspec | methodspec | classconstraint  
+
+  lazy val inheritspec = "inherit" ~> classtype ^^ { InheritSpec(_) }
+
+  lazy val valspec = ("val" ~> mutablevirtual) ~ lowercaseident ~ ":" ~ typeexpr ^^
+                     { case m~v~n~_~t => ValSpec(n, t, m, v) }
+
+  lazy val mutablevirtual = ("mutable" ~> success(true) | success(false)) ~
+                            ("virtual" ~> success(true) | success(false)) 
+
+  lazy val methodspec = "method" ~> ("private" ~> success(true) | success(false)) ~
+                        ("virtual" ~> success(true) | success(false)) ~ lowercaseident ~
+                        (":" ~> polytype) ^^ { case p~v~n~t => MethodSpec(n, t, p,  v) }
+
+  lazy val classconstraint = "constraint" ~>  typeexpr ~ "=" ~ typeexpr ^^ 
+                            { case t1~_~t2 => ClassConstraint(t1,t2) }
+
+  lazy val inherit = "inherit" ~> classexpr ~ ("as" ~> valuename).? ^^ { case c~v => Inherit(c,v) }
+
+  lazy val oval = "val" ~> ("mutable" ~> success(true) | success(false)) ~ lowercaseident ~
+                  (":" ~> typeexpr).? ~ ( "=" ~> expr) ^^ { case m~n~t~e => Val(n,e,m,t) }
+
+  lazy val virtualval = "val" ~> ("mutable" ~> success(true) | success(false)) ~ lowercaseident ~
+                  (":" ~> typeexpr) ^^ { case m~n~t => VirtualVal(n,t,m) }
+
+  lazy val initializer = "initializer" ~> expr ^^ { case e => Initializer(e) }
+  lazy val constraint = "constraint" ~> typeexpr ~ "=" ~ typeexpr ^^ { case t1~_~t2 => Constraint(t1,t2) }
+
+  lazy val classmethod = "method" ~> ("private" ~> success(true) | success(false)) ~
+                         lowercaseident ~ rep(parameter) ~ (":" ~> typeexpr).? ~
+                         ("=" ~> expr) ^^ { case p~n~ps~t~e => Method(n,ps,e,t,p)}
+
+  lazy val polymethod = "method" ~> ("private" ~> success(true) | success(false)) ~
+                         lowercaseident ~ (":" ~> polytype) ~
+                         ("=" ~> expr) ^^ { case p~n~t~e => PolyMethod(n,t,e,p)}
+
+  lazy val virtualmethod = "method" ~> ("private" ~> success(true) | success(false)) ~
+                         ("virtual" ~> lowercaseident) ~ (":" ~> polytype) ^^ 
+                         { case p~n~t => VirtualMethod(n,t,p)}
+
+  lazy val classfield = inherit | oval | virtualval | initializer | constraint | classmethod |
+                        polymethod | virtualmethod
+
+  lazy val classexpr : Parser[ClassExpr] =
+    ( simpleclassexpr | classascription | classfun | classletin | classletrecin |
+      classobject | cparentheses ) into classapp
+
+  lazy val cparentheses = "(" ~> classexpr <~ ")"
+
+  lazy val simpleclassexpr = ("[" ~> rep1sep(typeexpr, ",") <~ "]")  ~ name ^^
+                             {case ts~n => SimpleClassExpr(ts,n)} |
+                             name ^^ { case n => SimpleClassExpr(Nil, n) }
+
+  lazy val classascription = "(" ~> classexpr ~ ":" ~ classtype <~ ")" ^^ 
+                            { case e~_~t => ClassAscription(e,t) }
+
+  def classapp(e:ClassExpr) : Parser[ClassExpr] = (arg ^^ { case a => ClassApp(e,a) } into classapp) |
+                                             success(e)
+
+  lazy val classfun = "fun" ~> rep1(parameter) ~ "->" ~ classexpr ^^
+                  { case ps~_~ce => ClassFun(ps, ce) }
+
+  lazy val classletin: Parser[ClassLetIn] = ("let" ~> rep1sep(letbinding, "and") <~ "in") ~ classexpr ^^
+                             { case l~e => ClassLetIn(l,e) }
+
+  lazy val classletrecin: Parser[ClassLetRecIn] = ("let" ~> "rec" ~> rep1sep(letbinding, "and") <~
+                             "in") ~ classexpr ^^
+                             { case l~e => ClassLetRecIn(l,e) }
+
+  lazy val classobject = "object" ~> classbody <~ "end" ^^ { ClassObject(_) }
+
+  lazy val classbody = ("(" ~> pattern ~ (":" ~> typeexpr).? <~ ")")~ rep(classfield) ^^
+                       { case p~t~cf => ClassBody(cf, Some(p), t) } |
+                       rep(classfield) ^^ { ClassBody(_) }
+
+  lazy val classdefinition = ("class" ~> rep1sep(classbinding, "and") ) ^^
+                             { case l => ClassDefinition(l.head, l.tail:_*) }
+
+  lazy val classbinding = ("virtual" ~> success(true) | success(false)) ~
+                          (("[" ~> rep1("'" ~> ident) <~ "]") | success(Nil)) ~
+                          lowercaseident ~ rep(parameter) ~ (":" ~> classtype).? ~
+                          ("=" ~> classexpr) ^^
+                          { case v~tps~n~ps~ct~ce => ClassBinding(n, ps, ce, v, tps, ct) }
+
+  lazy val classspecification = ("class" ~> rep1sep(classspec, "and") ) ^^
+                             { case l => ClassSpecification(l.head, l.tail:_*) }
+
+  lazy val classspec  = ("virtual" ~> success(true) | success(false)) ~
+                          (("[" ~> rep1("'" ~> ident) <~ "]") | success(Nil)) ~
+                          lowercaseident ~ (":" ~> classtype) ^^ 
+                          { case v~tps~n~ct => ClassSpec(n, ct, v, tps) }
+
+  lazy val classtypedefinition = ("class" ~> "type" ~> rep1sep(classtypedef, "and") ) ^^
+                             { case l => ClassTypeDefinition(l.head, l.tail:_*) }
+
+
+  lazy val classtypedef  = ("virtual" ~> success(true) | success(false)) ~
+                          (("[" ~> rep1("'" ~> ident) <~ "]") | success(Nil)) ~
+                          lowercaseident ~ ("=" ~> classbodytype) ^^ 
+                          { case v~tps~n~ct => ClassTypeDef(n, ct, v, tps) }
 }

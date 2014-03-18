@@ -77,7 +77,7 @@ case class ConstrDeclarations(v: ConstrDecl*) extends TypeRepresentation
 case class ConstrDecl(s: String, ts: Type*)
 
 
-abstract class Type extends PolyType with TagSpec with TagSpecFull
+abstract class Type extends PolyType with TagSpec with TagSpecFull with FunctionParameter
 
 /**
   * The type expression ' ident stands for the type variable named ident. 
@@ -100,8 +100,10 @@ case object TUnderscore extends Type
   *  an optional labeled argument of type typexpr1 to results of type typexpr2. 
   * That is, the physical type of the function will be typexpr1 option ->  typexpr2.
   */ 
-case class FunctionType(t1: Type, t2: Type) extends Type
-case class LabeledFunctionType(label: String, t1: Type, t2: Type, optional: Boolean = false) extends Type 
+case class FunctionType(t1: FunctionParameter, t2: FunctionParameter) extends Type
+trait FunctionParameter 
+case class LabeledFunctionParameter(label: String, t1: Type,optional: Boolean = false) extends FunctionParameter 
+
 /**
   * The type expression typexpr1 * … *  typexprn denotes the type of tuples 
   * whose elements belong to types typexpr1, …  typexprn respectively.
@@ -237,8 +239,6 @@ trait TypePrettyPrinter {
     case TypeIdent(v) => "'" <> value(v)
     case TUnderscore => "_"
     case FunctionType(t1,t2) => parens(t1 <+> "->" <+> t2)
-    case LabeledFunctionType(l, t1, t2, false) =>  parens(value(l) <> ":" <+> t1 <+> "->" <+> t2)
-    case LabeledFunctionType(l, t1, t2, true) =>  parens("?" <> value(l) <> ":" <+> t1 <+> "->" <+> t2)
     case TupleType(ts@ _*) =>   parens(catList(ts.map(showType), " * "))
     case TypeAlias(t, as) => parens(t <+> "as '" <> value(as))
     case HashType(n) => parens("#" <+> n)
@@ -253,6 +253,12 @@ trait TypePrettyPrinter {
     case CloseVariantType(ts, None) => brackets("<" <> catList(ts.map(showTagSpecFull), " |")) 
     case CloseVariantType(ts, Some(ls)) => brackets("<" <> catList(ts.map(showTagSpecFull), " |")
       <+> ">" <+> catList(ls.map{case s => "`" <> value(s)}, ""))
+  }
+
+  implicit def showFunctionParameter(t: FunctionParameter) : Doc = t match {
+    case c : Type => showType(c)
+    case LabeledFunctionParameter(l, t1, false) =>  value(l) <> ":" <+> t1
+    case LabeledFunctionParameter(l, t1, true) =>  "?" <> value(l) <> ":" <+> t1
   }
 
   implicit def showPolyType(p : PolyType) : Doc = p match {
@@ -354,13 +360,21 @@ trait TypeParser extends RegexParsers with Parsers {
     ("#" ~> name ^^ { case n => HashType(n, t) } into singlearghash) |  success(t)
 
   def functiontype(t: Type) :Parser[Type] = 
-    "->" ~> typeexpr ^^ { case t2 => FunctionType(t,t2) } | success(t)
+    "->" ~> rep1sep(functionparameter,"->") ^^ { case ts => 
+    (t::ts).reduceRight((t, t2) => FunctionType(t,t2)).asInstanceOf[Type] } | success(t)
 
-  lazy val labeledfunctiontype : Parser[Type] = 
-    ("?" ~> lowercaseident <~ ":") ~ (lvlt3 <~ "->") ~ typeexpr ^^
-       { case i~t~t2 => LabeledFunctionType(i, t, t2, true) } |
-    (lowercaseident <~ ":") ~ (lvlt3 <~ "->") ~ typeexpr ^^
-       { case i~t~t2 => LabeledFunctionType(i, t, t2, false) }
+  lazy val functionparameter : Parser[FunctionParameter] = labeledfunctionparameter | lvlt2
+
+  def functiontypelabeled(t: LabeledFunctionParameter) : Parser[Type] =
+    "->" ~> rep1sep(functionparameter,"->") ^^ { case ts => 
+    (t::ts).reduceRight((t, t2) => FunctionType(t,t2)).asInstanceOf[Type]} 
+  
+
+  lazy val labeledfunctionparameter  = 
+    ("?" ~> lowercaseident <~ ":") ~ (lvlt2) ^^
+       { case i~t => LabeledFunctionParameter(i, t, true) } |
+    (lowercaseident <~ ":") ~ (lvlt2) ^^
+       { case i~t => LabeledFunctionParameter(i, t, false) }
 
   lazy val polytype  =
        rep1("'" ~> ident) ~ "." ~ typeexpr ^^ { case ls~_~t => PolymorphType(ls,t) } |
@@ -399,7 +413,7 @@ trait TypeParser extends RegexParsers with Parsers {
                          { case i~ts => TagTypeFull(i, ts) } | typeexpr
 
   lazy val lvlt0 = lvlt1 into astype // as
-  lazy val lvlt1 = (labeledfunctiontype | lvlt2) into functiontype// ->
+  lazy val lvlt1 = (labeledfunctionparameter into functiontypelabeled) | (lvlt2 into functiontype) // ->
   lazy val lvlt2 = lvlt3 into tupletype //*
   lazy val lvlt3 = (hashtype | lvlt4) into singlearghash // #
   lazy val lvlt4 = lvlt5 into singleargconstr // constr
@@ -409,8 +423,6 @@ trait TypeParser extends RegexParsers with Parsers {
 
   lazy val typedefinition = ("type" ~> rep1sep(typedef, "and") ) ^^
                              { case l => TypeDefinition(l:_*) }
-// case class TypeDef(tyvars: List[TypeParameter], constr: String, t: Option[Type] = None,
-// trep: Option[TypeRepresentation], constraints: List[TypeConstraint] = List()) 
 
   lazy val typedef = typeparams ~ lowercaseident ~ ("=" ~> typeexpr).? ~ typerepresentation.? ~
   rep(typeconstraint) ^^

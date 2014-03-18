@@ -7,6 +7,7 @@ import scalaocaml._
 class ParserTest extends FunSuite with TestExamples
 {
 
+
   def compare(term: Any, input: String) = {
     
     OCamlParser.parseAny(input) match {
@@ -47,6 +48,33 @@ class ParserTest extends FunSuite with TestExamples
     }
   }
 
+  def compareClassType(term: ClassType, input: String) = {
+    OCamlParser.parseClassType(input) match {
+      case Right(t) =>
+        if(t != term)
+          {
+            println(t)
+            println(term)
+          }
+        assert(t == term)
+      case Left(msg) => throw new Exception(msg)
+    }
+  }
+
+  def compareClassExpr(term: ClassExpr, input: String) = {
+    OCamlParser.parseClassExpr(input) match {
+      case Right(t) =>
+        if(t != term)
+          {
+            println(t)
+            println(term)
+          }
+        assert(t == term)
+      case Left(msg) => throw new Exception(msg)
+    }
+  }
+
+
   def compareExpr(term: Expr, input: String) = {
     OCamlParser.parseExpr(input) match {
       case Right(t) =>
@@ -66,25 +94,25 @@ class ParserTest extends FunSuite with TestExamples
   test("priorities") {
     val result = InfixOp(OInt(2), "+",InfixOp(OInt(3), "*", OInt(4)))
     val expect = "2 + 3 * 4"
-    compare(result, expect)
+    compareExpr(result, expect)
   }
 
   test("priorities 2") {
     val result = InfixOp(InfixOp(OInt(2), "*", OInt(3)), "+", OInt(4))
     val expect = "2 * 3 + 4"
-    compare(result, expect)
+    compareExpr(result, expect)
   }
 
   test("left associative") {
     val result = InfixOp(InfixOp(OInt(2), "*", OInt(3)), "*", OInt(4))
     val expect = "2 * 3 * 4"
-    compare(result, expect)
+    compareExpr(result, expect)
   }
 
   test("right associative") {
     val result = InfixOp(OInt(2), "^",InfixOp(OInt(3), "^", OInt(4)))
     val expect = "2 ^ 3 ^ 4"
-    compare(result, expect)
+    compareExpr(result, expect)
   }
 
   test("performance bug") {

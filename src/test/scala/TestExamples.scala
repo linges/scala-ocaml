@@ -8,6 +8,8 @@ trait TestExamples extends FunSuite {
   def compare(result: Any, expect: String)
   def compareType(result: Type, expect: String)
   def compareExpr(result: Expr, expect: String)
+  def compareClassExpr(result: ClassExpr, expect: String)
+  def compareClassType(result: ClassType, expect: String)
   def compareDef(result: Definition, expect: String)
 
   implicit def intToOCaml(i: Int) = OInt(i)
@@ -674,8 +676,8 @@ trait TestExamples extends FunSuite {
   }
 
   test("function type"){
-    val result = FunctionType(LabeledFunctionType("foo", int, string),
-        LabeledFunctionType("bar", int, string, true))
+    val result = FunctionType(FunctionType(LabeledFunctionParameter("foo", int), string),
+        FunctionType(LabeledFunctionParameter("bar", int, true), string))
     val expect = """ 
     ((foo: int -> string) -> (?bar: int -> string))  
     """
@@ -862,7 +864,6 @@ trait TestExamples extends FunSuite {
     * Classes
     */
 
- /*
 
   test("class type") {
     val result = ClassType(List(),
@@ -873,7 +874,7 @@ trait TestExamples extends FunSuite {
         MethodSpec("d", int, true, true),
         MethodSpec("e", int, false, true),
         MethodSpec("f", int),
-        InheirtSpec(SimpleClassBodyType(List(),ExtendedName("foo"))),
+        InheritSpec(ClassType(List(),SimpleClassBodyType(List(),Name("foo")))),
         ClassConstraint(int, int)
       ))
     val expect = """
@@ -887,73 +888,86 @@ trait TestExamples extends FunSuite {
       inherit foo
       constraint int = int
     end"""
-    compareExpr(result, expect)
+    compareClassType(result, expect)
   }
 
   test("simple class type") {
     val result = ClassType(List(
       ClassTypeFunctionArg(int, Some("foo"), true),
       ClassTypeFunctionArg(string)),
-      SimpleClassBodyType(List(int,string), ExtendedName("class")))
+      SimpleClassBodyType(List(int,string), Name("name")))
     val expect = """ 
     ?foo: int ->
-    string ->
-    [int, string] class
+    string -> 
+    [int, string] name
     """
-    compareExpr(result, expect)
+    compareClassType(result, expect)
+  }
+
+  test("simple class type 2") {
+    val result = ClassType(List(
+      ClassTypeFunctionArg(int, Some("foo"), true),
+      ClassTypeFunctionArg(string, Some("bar"))),
+      SimpleClassBodyType(List(int,string), Name("name")))
+    val expect = """ 
+    ?foo: int ->
+    bar: string -> 
+    [int, string] name
+    """
+    compareClassType(result, expect)
   }
 
   test("simple class expression") {
-    val result = SimpleClassExpr(List(int, string), Name("Foo"))
+    val result = SimpleClassExpr(List(int, string), Name("foo"))
     val expect = """
-    [int, string] Foo
+    [int, string] foo
     """
-    compareExpr(result, expect)
+    compareClassExpr(result, expect)
   }
 
   test("class ascription") {
-    val result = ClassAscription(SimpleClassExpr(List(), Name("Foo")),
+    val result = ClassAscription(SimpleClassExpr(List(), Name("foo")),
       ClassType(List(),
-      SimpleClassBodyType(List(), ExtendedName("Foo"))) )
+      SimpleClassBodyType(List(), Name("foo"))) )
     val expect = """
-    (Foo : Foo) 
+    (foo : foo) 
     """
-    compareExpr(result, expect)
+    compareClassExpr(result, expect)
   }
 
   test("class fun and app") {
-    val foo = SimpleClassExpr(List(), Name("Foo"))
-    val result = ClassApp(
+    val foo = SimpleClassExpr(List(), Name("foo"))
+    val result = ClassApp(ClassApp(
       ClassFun(List(PVar("a"),PVar("b")), foo),
-      "x", "y")
+      "x"), "y")
     val expect = """
-    ((fun a b -> Foo) x y)
+    (((fun a b -> foo) x) y)
     """
-    compareExpr(result, expect)
+    compareClassExpr(result, expect)
   }
 
   test("class let") {
-    val foo = SimpleClassExpr(List(), Name("Foo"))
+    val foo = SimpleClassExpr(List(), Name("foo"))
     val result = ClassLetIn(List(Binding(PVar("x"), OInt(7))), foo)
     val expect = """
     let x = 7
-    in Foo
+    in foo
     """
-    compareExpr(result, expect)
+    compareClassExpr(result, expect)
   }
 
   test("class let rec") {
-    val foo = SimpleClassExpr(List(), Name("Foo"))
+    val foo = SimpleClassExpr(List(), Name("foo"))
     val result = ClassLetRecIn(List(Binding(PVar("x"), OInt(7))), foo)
     val expect = """
     let rec x = 7
-    in Foo
+    in foo
     """
-    compareExpr(result, expect)
+    compareClassExpr(result, expect)
   }
 
   test("class object") {
-    val foo = SimpleClassExpr(List(), Name("Foo"))
+    val foo = SimpleClassExpr(List(), Name("foo"))
     val result = ClassObject(ClassBody(List(
       Inherit(foo, Some("bar")),
       Val("a", OInt(7), true, Some(int)),
@@ -963,7 +977,7 @@ trait TestExamples extends FunSuite {
       Method("e", List(), OInt(2), None , true),
       Method("f", List(PVar("a")), OInt(2)),
       PolyMethod("p", PolymorphType(List("a", "b"), TypeConstr(ExtendedName("test"))), OInt(2), true),
-      PolyMethod("p2", int, OInt(2)),
+      Method("p2", List(), OInt(2), Some(int)),
       VirtualMethod("v", int, true),
       VirtualMethod("v2", int)
     ),
@@ -972,7 +986,7 @@ trait TestExamples extends FunSuite {
     val expect = """
     object
       (x : int)
-      inherit Foo as bar
+      inherit foo as bar
       val mutable a : int = 7
       val b = 7
       val c : int = 7
@@ -985,8 +999,9 @@ trait TestExamples extends FunSuite {
       method virtual v2 : int
     end
     """
-    compareExpr(result, expect)
+    compareClassExpr(result, expect)
   }
+ /*
 
   /**
     * Module types
