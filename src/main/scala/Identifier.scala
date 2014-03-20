@@ -10,7 +10,7 @@ import scala.language.implicitConversions
 
 abstract class Identifier
 case class ExtendedModuleName(moduleName: String, paths : List[ExtendedModulePath] = List()) extends Identifier
-case class ExtendedModulePath(name: ExtendedModuleName, l: List[ExtendedModuleName] = List()) extends Identifier
+case class ExtendedModulePath(l: List[ExtendedModuleName]) extends Identifier
 
 case class ExtendedName(id: String, path: Option[ExtendedModulePath] = None) extends Identifier
 case class Name(id: String, path: List[String]) extends Identifier with DirectiveArgument
@@ -29,11 +29,10 @@ trait IdentifierPrettyPrinter {
 
   implicit def showIdentifier(n: Identifier) : Doc = n match {
     case Name(n, Nil) => n
-    case Name(n, l) => catList(l.map(string),dot) <> dot <> n
+    case Name(n, l) => l.map(string).reduceLeft( (a,z) => a <> dot <> z) <> dot <> n
     case ExtendedName(n, None) => n
-    case ExtendedName(n, Some(l)) => l <> dot <+> n
-    case ExtendedModulePath(n, Nil) => n
-    case ExtendedModulePath(n, l) => catList(l.map(showIdentifier),dot) <> dot <> n
+    case ExtendedName(n, Some(l)) => l <> dot <> n
+    case ExtendedModulePath(l) => l.map(showIdentifier).reduceLeft( (a,z) => a <> dot <> z)
     case ExtendedModuleName(n, Nil) => n
     case ExtendedModuleName(n, l) => n <+> catList(l.map(x => parens(showIdentifier(x))), "")
   }
@@ -52,9 +51,8 @@ trait IdentifierParser extends RegexParsers with Parsers {
   rep("(" ~> extendedmodulepath <~ ")") ^^
     { case n ~ es => ExtendedModuleName(n, es) }
 
-  lazy val extendedmodulepath : Parser[ExtendedModulePath] = extendedmodulename ~ 
-    rep ("." ~> extendedmodulename) ^^
-  { case n ~ es => ExtendedModulePath(n, es) }
+  lazy val extendedmodulepath : Parser[ExtendedModulePath] = rep1sep (extendedmodulename, ".") ^^
+        { case es => ExtendedModulePath(es) }
 
   lazy val valuepath: Parser[Name] = (rep1sep(capitalizedident, ".") <~ ".").? ~ 
    valuename ^^

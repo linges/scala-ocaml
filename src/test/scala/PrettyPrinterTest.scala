@@ -23,6 +23,7 @@ class PrettyPrinterTest extends FunSuite with TestExamples
   def compareClassExpr(result: ClassExpr, expect: String) = compare(result, expect)
   def compareClassType(result: ClassType, expect: String) = compare(result, expect)
   def compareDef(result: Definition, expect: String) = compare(result, expect)
+  def compareIdentifier(result: Identifier, expect: String) = compare(result, expect)
 
   def cleanString(s:String) = 
     s.replaceAll("[\n\r]"," ").replaceAll("\\s+", " ").trim

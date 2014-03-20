@@ -11,6 +11,7 @@ trait TestExamples extends FunSuite {
   def compareClassExpr(result: ClassExpr, expect: String)
   def compareClassType(result: ClassType, expect: String)
   def compareDef(result: Definition, expect: String)
+  def compareIdentifier(result: Identifier, expect: String)
 
   implicit def intToOCaml(i: Int) = OInt(i)
   implicit def stringToVar(s: String) = Var(Name(s))
@@ -1125,27 +1126,40 @@ trait TestExamples extends FunSuite {
     compareExpr(result, expect)
   }
 
+  */
   /**
     * Names
     */
 
+  test("name") {
+    val result = Name("n", List("A","B","Z"))
+    val expect = """
+    A.B.Z.n 
+    """
+    compareIdentifier(result, expect)
+  }
+
   test("extended name") {
-    val result = ExtendedName("name", List(
-      ExtendedModulePath(ExtendedModuleName("a", List(
-        ExtendedModulePath(ExtendedModuleName("aa", List(
-          ExtendedModulePath(ExtendedModuleName("aaa")))
+    val result = ExtendedName("name", Some(
+      ExtendedModulePath(List(
+        ExtendedModuleName("A", List(
+          ExtendedModulePath(List(
+            ExtendedModuleName("AA", List(
+              ExtendedModulePath(List(ExtendedModuleName("AAA")))
+            ))
+          )),
+            ExtendedModulePath(List(
+                ExtendedModuleName("B")))
         )),
-        ExtendedModulePath(ExtendedModuleName("b"))
-       )
-      )),
-      ExtendedModulePath(ExtendedModuleName("c", List(
-        ExtendedModulePath(ExtendedModuleName("f"), List(ExtendedModuleName("d")))
-      )))
+        ExtendedModuleName("C", List(ExtendedModulePath(List(
+          ExtendedModuleName("D"),
+          ExtendedModuleName("F")
+            ))))
+      ))
     ))
     val expect = """
-    a (aa (aaa)) (b). c (d.f). name
+    A (AA (AAA)) (B).C (D.F).name
     """
-    compareExpr(result, expect)
+    compareIdentifier(result, expect)
   }
-  */
 }
