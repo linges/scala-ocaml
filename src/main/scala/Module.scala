@@ -1,5 +1,12 @@
 package scalaocaml
 
+import scala.util.parsing.combinator.Parsers
+import scala.util.parsing.combinator.RegexParsers
+import scala.util.parsing.combinator.Parsers
+import scala.util.matching.Regex
+import scala.language.postfixOps
+import scala.language.implicitConversions
+
 /**
   * Module types are the module-level equivalent of type expressions: 
   * they specify the general shape and type properties of modules.
@@ -47,7 +54,6 @@ case class MTTypeConstraint( tps : List[TypeParameter], typeConstr: ExtendedName
   */
 case class MTModuleConstraint(m1 : Name, m2: ExtendedModulePath) extends MTConstraint
 
-//TODO external specification is missing
 trait Specification
 /**
   * A specification of a value component in a signature is written 
@@ -60,7 +66,7 @@ case class SVal(name : String, t : Type) extends Specification
   * an exception with the name and arguments specified in the definition, 
   * and makes the exception available to all users of the structure.
   */
-case class SException(cd: ConstrDecl) extends Specification
+case class MTException(cd: ConstrDecl) extends Specification
 
 /**
   * A specification of a module component in a signature is written
@@ -165,7 +171,7 @@ case class ModuleDefinition(name: String, ce: ModuleExpr, fs: List[(String, Modu
   */
 case class IncludeDef(me: ModuleExpr) extends Definition 
 
-case class External(name: String, t: Type, externaldec: String) extends Definition
+case class External(name: String, t: Type, externaldec: String) extends Definition with Specification
 
 trait ModulePrettyPrinter {
   self: OCamlPrettyPrinter =>
@@ -173,7 +179,7 @@ trait ModulePrettyPrinter {
   implicit def showModuleExpr(me: ModuleExpr) : Doc = me match {
     case MVar(n) => n
     case Struct(mi@ _*) =>"struct" <> nest(lsep(mi.map(showModuleItem), ";;")) <@> "end"
-    case Functor(name, mt, me) => "functor" <+> parens( name <+> ":" <+> mt) <+> "->" <+> me
+    case Functor(name, mt, me) => parens("functor" <+> parens( name <+> ":" <+> mt) <+> "->" <+> me)
     case FunctorApp(me1, me2) => me1 <+> parens( me2 )
     case MEAscription(me, mt) => parens( me <+> ":" <+> mt)
   }
@@ -187,7 +193,7 @@ trait ModulePrettyPrinter {
     case cs: ClassSpecification => showClassSpecification(cs)
     case ctd: ClassTypeDefinition => showClassTypeDefinition(ctd)
     case SVal(name, t) => "val" <+> name <+> ":" <+> t
-    case SException(cd) => "exception" <+> showConstrDecl(cd)
+    case MTException(cd) => "exception" <+> showConstrDecl(cd)
     case ModuleSpecification(name,Nil, mt) => "module" <+> name <+> ":" <+> mt
     case ModuleSpecification(name, fs, mt) => "module" <+> name <> 
         catList(fs.map{ case (s,mt) => parens(s <+> ":" <+> mt)}, "") <+> ":" <+> mt
@@ -231,3 +237,94 @@ trait ModulePrettyPrinter {
 
 
 
+
+trait ModuleParser extends RegexParsers with Parsers {
+  self: OCamlParser =>
+
+  lazy val moduletype : Parser[ModuleType] = 
+    (mtvar | signatur | functortype | mtparentheses) into mtwith
+
+  lazy val mtvar = modtypepath ^^ { MTVar(_) }
+
+  lazy val signatur = "sig" ~> rep(specification <~ ";;".?) <~ "end" ^^ { Signatur( _ :_ *) }
+
+  lazy val functortype = "functor" ~> "(" ~> (capitalizedident ~ (":" ~> moduletype <~ ")" )) ~ 
+                         ("->" ~> moduletype) ^^ { case n~as~mt => FunctorType(n,as,mt) }
+
+
+  def mtwith(mt: ModuleType) : Parser[ModuleType] =
+    ("with" ~> rep1sep(modconstraint, "and") ^^
+    { case mcs => MTWith(mt, mcs:_*) } into mtwith)  | success(mt)
+
+  lazy val mtparentheses = "(" ~> moduletype <~ ")"
+
+
+  lazy val modconstraint = mttypeconstraint | mtmoduleconstraint 
+ 
+  lazy val mttypeconstraint = "type" ~> typeparams  ~ extendedname ~ ("=" ~> typeexpr) ^^
+                              {case tps~n~t => MTTypeConstraint(tps,n,t) }
+
+  lazy val mtmoduleconstraint = "module" ~> capitalname ~ "=" ~ extendedmodulepath ^^
+                                { case m1~_~m2 => MTModuleConstraint(m1,m2) }
+
+  lazy val specification = sval | external | typedefinition | mtexception | classspecification |
+                           classtypedefinition | moduletypespecification | modulespecification |
+                           open | include
+
+  lazy val sval = "val" ~> valuename ~ ":" ~ typeexpr ^^ { case v~_~t => SVal(v,t) }
+
+  lazy val external = "external" ~> valuename ~ ":" ~ typeexpr ~ "=" ~ """"(\\"|[^"])*"""".r ^^
+                      { case n~_~t~_~e => External(n,t,e.substring(1, e.length() - 1)) }
+
+  lazy val mtexception = "exception" ~> constrdecl ^^ { MTException(_) }
+
+  lazy val modulespecification = 
+    "module"  ~> capitalizedident ~
+     rep( "(" ~> capitalizedident ~ (":" ~> moduletype <~ ")") ^^ { case n~t => (n,t) }) ~
+    (":" ~> moduletype) ^^ {case n~ts~t => ModuleSpecification(n,ts,t)}
+
+  lazy val moduletypespecification = "module" ~> "type" ~> ident ~ "=" ~ moduletype ^^
+                                     { case i~_~t => ModuleTypeSpecification(i,Some(t)) } |
+                                     "module" ~> "type" ~> ident ^^
+                                     { case i => ModuleTypeSpecification(i,None) } 
+
+  lazy val include = "include" ~> moduletype ^^ { Include(_) }
+
+  lazy val open = "open" ~> capitalname ^^ { Open(_) } 
+
+  lazy val moduleexpr : Parser[ModuleExpr] = 
+    (mvar | struct | functor | meopenparentheses) into functorapp
+
+  lazy val mvar =  capitalname ^^ { MVar(_) }
+
+  lazy val struct = "struct" ~> moduleitems <~ "end" ^^ { case is => Struct(is:_*) }
+
+  lazy val functor = "functor" ~ "(" ~> capitalizedident ~ (":" ~> moduletype  <~")") ~
+                     ("->" ~> moduleexpr) ^^ { case n~t~e => Functor(n,t,e) }
+
+  def functorapp(me: ModuleExpr) : Parser[ModuleExpr] = 
+    ("(" ~> moduleexpr <~ ")" ^^ { case a => FunctorApp(me, a) } into functorapp) | success(me) 
+
+  lazy val meopenparentheses = "(" ~> moduleexpr into meascription
+
+  def meascription(me: ModuleExpr) : Parser[ModuleExpr] =
+    ":" ~> moduletype <~ ")" ^^ { case mt => MEAscription(me, mt) } |
+    ")" ~> success(me)
+
+  lazy val moduleitems = ";;".? ~> (definition | expr) ~ 
+    (rep(";;".? ~> definition | ";;" ~> expr) <~ ";;".?) ^^ {case i~is => i::is}
+
+
+  lazy val moduletypedef = "module" ~> "type" ~> ident ~ "=" ~ moduletype ^^
+                                     { case i~_~t => ModuleTypeDef(i,t) } 
+
+  lazy val moduledef =
+    "module"  ~> capitalizedident ~
+     rep( "(" ~> capitalizedident ~ (":" ~> moduletype <~ ")") ^^ { case n~t => (n,t) }) ~
+    (":" ~> moduletype).? ~ ("=" ~> moduleexpr) ^^
+    {case n~ts~t~e => ModuleDefinition(n,e,ts,t)}
+
+  def definition : Parser[Definition] = let | letrec | typedefinition | exceptiondefinition | 
+                                        classdefinition | external | classtypedefinition | 
+                                        moduletypedef | moduledef 
+} 

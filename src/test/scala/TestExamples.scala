@@ -12,6 +12,8 @@ trait TestExamples extends FunSuite {
   def compareClassType(result: ClassType, expect: String)
   def compareDef(result: Definition, expect: String)
   def compareIdentifier(result: Identifier, expect: String)
+  def compareModuleType(result: ModuleType, expect: String)
+  def compareModuleExpr(result: ModuleExpr, expect: String)
 
   implicit def intToOCaml(i: Int) = OInt(i)
   implicit def stringToVar(s: String) = Var(Name(s))
@@ -1002,42 +1004,41 @@ trait TestExamples extends FunSuite {
     """
     compareClassExpr(result, expect)
   }
- /*
 
   /**
     * Module types
     */
 
   test("functor type") {
-    val result = FunctorType("foo", mt, mt)
+    val result = FunctorType("Foo", mt, mt)
     val expect = """
-    functor (foo : mt) -> mt
+    functor (Foo : mt) -> mt
     """
-    compareExpr(result, expect)
+    compare(result, expect)
   }
 
   test("module type with") {
     val result = MTWith(mt,
       MTTypeConstraint(List(TypeParameter("a", Some(Covariant))), ExtendedName("foo"), int),
-      MTModuleConstraint(Name("bar"), ExtendedModulePath(ExtendedModuleName("test")))
+      MTModuleConstraint(Name("Bar"), ExtendedModulePath(List(ExtendedModuleName("Test"))))
     )
     val expect = """
     mt with type +'a foo = int and
-    module bar = test
+    module Bar = Test
     """
-    compareExpr(result, expect)
+    compareModuleType(result, expect)
   }
 
   test("module sig") {
     val result = Signatur(
       SVal("foo", int),
-      SException(ConstrDecl("ex")),
-      ModuleSpecification("bar", List(), mt),
-      ModuleSpecification("bar2", List(("a",mt), ("b", mt)), mt),
-      ModuleTypeSpecification("t"),
-      ModuleTypeSpecification("t2", Some(mt)),
+      MTException(ConstrDecl("Ex")),
+      ModuleSpecification("Bar", List(), mt),
+      ModuleSpecification("Bar2", List(("A",mt), ("B", mt)), mt),
+      ModuleTypeSpecification("T"),
+      ModuleTypeSpecification("T2", Some(mt)),
       Include(mt),
-      Open(Name("tt")),
+      Open(Name("Tt")),
       ClassSpecification(
         ClassSpec("cl", ClassType(List(), NormalClassBodyType(None)),
           true, List("b", "c")),
@@ -1053,20 +1054,20 @@ trait TestExamples extends FunSuite {
     val expect = """
     sig
       val foo : int;;
-      exception ex;;
-      module bar : mt;;
-      module bar2(a : mt) (b : mt) : mt;;
-      module type t;;
-      module type t2 = mt;;
+      exception Ex;;
+      module Bar : mt;;
+      module Bar2(A : mt) (B : mt) : mt;;
+      module type T;;
+      module type T2 = mt;;
       include mt;;
-      open tt;;
+      open Tt;;
       class virtual ['b 'c] cl : object end 
         and cl2 : object end;;
-      class type virtual ['b 'c] cl : object end 
-        and cl2 : object end
+      class type virtual ['b 'c] cl = object end 
+        and cl2 = object end
     end
     """
-    compareExpr(result, expect)
+    compareModuleType(result, expect)
   }
 
   /**
@@ -1090,43 +1091,43 @@ trait TestExamples extends FunSuite {
     """
     compareDef(result, expect)
   }
+
   test("functor") {
-    val result = FunctorApp(Functor("f", mt, MEAscription(MVar(Name("x")), mt)), MVar(Name("y")))
+    val result = FunctorApp(Functor("F", mt, MEAscription(MVar(Name("X")), mt)), MVar(Name("Y")))
     val expect = """
-    functor (f : mt) -> (x : mt) (y)
+    (functor (F : mt) -> (X : mt)) (Y)
     """
-    compareExpr(result, expect)
+    compareModuleExpr(result, expect)
   }
 
   test("struct") {
     val result = Struct(
       ModuleTypeDef("foo", mt),
-      ModuleDefinition("bar", MVar(Name("n")), List("a" -> mt, "b" -> mt), Some(mt)),
-      ModuleDefinition("bar", MVar(Name("n")), List("a" -> mt)),
-      ModuleDefinition("bar", MVar(Name("n")) ),
-      ModuleDefinition("bar", MVar(Name("n")), List(), Some(mt)),
+      ModuleDefinition("Bar", MVar(Name("N")), List("A" -> mt, "B" -> mt), Some(mt)),
+      ModuleDefinition("Bar", MVar(Name("N")), List("A" -> mt)),
+      ModuleDefinition("Bar", MVar(Name("N")) ),
+      ModuleDefinition("Bar", MVar(Name("N")), List(), Some(mt)),
       OInt(7),
       ClassDefinition(ClassBinding("c", List(), SimpleClassExpr(List(), Name("cc")),
-        true, List("a"), Some(ClassType(List(), SimpleClassBodyType(List(), ExtendedName("ct")))))),
+        true, List("a"), Some(ClassType(List(), SimpleClassBodyType(List(), Name("ct")))))),
       ClassDefinition(ClassBinding("c", List(), SimpleClassExpr(List(), Name("cc")),
         false, List(), None))
     )
     val expect = """
     struct
       module type foo = mt;;
-      module bar(a : mt) (b : mt) : mt = n;;
-      module bar(a : mt) = n;;
-      module bar = n;;
-      module bar : mt = n;;
+      module Bar(A : mt) (B : mt) : mt = N;;
+      module Bar(A : mt) = N;;
+      module Bar = N;;
+      module Bar : mt = N;;
       7;;
       class virtual ['a] c : ct = cc;;
       class c = cc
     end
     """
-    compareExpr(result, expect)
+    compareModuleExpr(result, expect)
   }
 
-  */
   /**
     * Names
     */

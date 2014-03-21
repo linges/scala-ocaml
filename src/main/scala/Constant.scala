@@ -62,7 +62,7 @@ trait ConstantParser extends RegexParsers with Parsers {
      d => OFloat(d.toDouble)
   }
 
-  lazy val unit: Parser[Unit.type] = """\(\)""".r ^^ { _ => Unit } //TODO
+  lazy val unit: Parser[Unit.type] = """\(\)""".r ^^ { _ => Unit } 
   lazy val otrue: Parser[True.type] = """true""".r ^^ { _ => True }
   lazy val ofalse: Parser[False.type] = """False""".r ^^ { _ => False }
   lazy val emptylist: Parser[EmptyList.type] = """\[\]""".r ^^ { _ => EmptyList }

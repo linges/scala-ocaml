@@ -44,6 +44,9 @@ trait IdentifierParser extends RegexParsers with Parsers {
   lazy val name: Parser[Name] = (rep1sep(capitalizedident, ".") <~ ".").? ~ lowercaseident ^^
   { case path ~ s => Name(s,path.getOrElse(Nil)) }
 
+  lazy val modtypepath = ( extendedmodulepath <~ "." ).? ~ ident ^^
+      { case p~n => ExtendedName(n,p) }
+
   lazy val extendedname = ( extendedmodulepath <~ "." ).? ~ lowercaseident ^^
       { case p~n => ExtendedName(n,p) }
 
@@ -58,7 +61,9 @@ trait IdentifierParser extends RegexParsers with Parsers {
    valuename ^^
   { case path ~ s => Name(s,path.getOrElse(Nil)) }
 
-  lazy val constrpath: Parser[Name] = (rep1sep(capitalizedident, ".") <~ ".").? ~ 
+  lazy val constrpath = capitalname
+
+  lazy val capitalname: Parser[Name] = (rep1sep(capitalizedident, ".") <~ ".").? ~ 
   capitalizedident  ^^
   { case path ~ s => Name(s,path.getOrElse(Nil)) }
 

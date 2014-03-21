@@ -200,7 +200,7 @@ case class ClassSpec(name: String, ct: ClassType, virtual : Boolean = false, typ
   * The definition can be parameterized by some type parameters. 
   * If any method in the class type body is virtual, the definition must be flagged virtual.
   */
-case class ClassTypeDefinition(cd: ClassTypeDef, cds: ClassTypeDef*) extends Specification
+case class ClassTypeDefinition(cd: ClassTypeDef, cds: ClassTypeDef*) extends Specification with Definition
 case class ClassTypeDef(name: String, ct: ClassBodyType, virtual : Boolean = false, typeParams: List[String] = List())
 
 /**
@@ -244,11 +244,11 @@ trait ClassPrettyPrinter {
 
   implicit def showClassTypeDef(cs: ClassTypeDef) : Doc = cs match {
     case ClassTypeDef(name, ct, virt, Nil) =>
-     (if(virt) "virtual " else "") <> name <+> ":" <+> ct 
+     (if(virt) "virtual " else "") <> name <+> "=" <+> ct 
     case ClassTypeDef(name, ct, virt, tp) =>
      (if(virt) "virtual " else "") <>
       brackets(catList(tp.map("'" <> _), "")) <+>
-      name <+> ":" <+> ct
+      name <+> "=" <+> ct
   }
 
   def showClassSpecification(cs: ClassSpecification) : Doc = cs match {

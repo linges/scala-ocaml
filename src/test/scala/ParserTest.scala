@@ -86,9 +86,34 @@ class ParserTest extends FunSuite with TestExamples
     }
   }
 
-
   def compareExpr(term: Expr, input: String) = {
     OCamlParser.parseExpr(input) match {
+      case Right(t) =>
+        if(t != term)
+          {
+            println(t)
+            println(term)
+          }
+        assert(t == term)
+      case Left(msg) => throw new Exception(msg)
+    }
+  }
+
+  def compareModuleExpr(term: ModuleExpr, input: String) = {
+    OCamlParser.parseModuleExpr(input) match {
+      case Right(t) =>
+        if(t != term)
+          {
+            println(t)
+            println(term)
+          }
+        assert(t == term)
+      case Left(msg) => throw new Exception(msg)
+    }
+  }
+
+  def compareModuleType(term: ModuleType, input: String) = {
+    OCamlParser.parseModuleType(input) match {
       case Right(t) =>
         if(t != term)
           {

@@ -301,8 +301,6 @@ case class SelfCopy(update: Map[String, Expr]) extends Expr
   */
 case class Object(body: ClassBody) extends Expr 
 
-//TODO lazy assert
-
 trait Argument 
 case class LabeledArg(name: String, e: Option[Expr] = None) extends Argument
 case class OptionalLabeledArg(name: String, e: Option[Expr] = None) extends Argument
@@ -385,7 +383,7 @@ trait ExprPrettyPrinter {
         t.map(" :"<+> _).getOrElse("") <> t2.map(" :>"<+> _).getOrElse("") <+> "=" <+> e
   }
 }
-//TODO test performance 
+
 trait ExprParser extends RegexParsers with Parsers {
   self: OCamlParser =>
 
@@ -461,7 +459,7 @@ trait ExprParser extends RegexParsers with Parsers {
 
   lazy val instvarassign: Parser[Expr] = (lowercaseident <~ "<-") ~ expr ^^ { case n~e => AssignInstVar(n,e) }
 
-  def sequence(e: Expr)  =  ";" ~> repsep(lvl2, ";") ^^ { case l => Sequence(e::l:_*) } | success(e) 
+  def sequence(e: Expr)  =  ";" ~> rep1sep(lvl2, ";") ^^ { case l => Sequence(e::l:_*) } | success(e) 
 
   lazy val letin: Parser[LetIn] = ("let" ~> rep1sep(letbinding, "and") <~ "in") ~ expr ^^
                              { case l~e => LetIn(l,e) }

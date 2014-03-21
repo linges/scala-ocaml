@@ -17,7 +17,7 @@ object OCamlParser extends OCamlParser
  */
 trait OCamlParser extends RegexParsers with Parsers
       with IdentifierParser with ConstantParser with TypeParser with PatternParser with ExprParser
-      with ClassParser{
+      with ClassParser with ModuleParser {
   def parseExpr(in: String): Either[String, Expr] = {
     try {
       parseAll(expr, new ParserString(in)) match {
@@ -132,9 +132,40 @@ trait OCamlParser extends RegexParsers with Parsers
         Left("UNEXPECTED ERROR: " + e.getMessage() + "\n" + baos.toString)
     }
   }
+
+
+  def parseModuleExpr(in: String): Either[String, ModuleExpr] = {
+    try {
+      parseAll(moduleexpr, new ParserString(in)) match {
+        case Success(result, _) => Right(result)
+        case NoSuccess(msg, in1) =>
+          Left(msg)
+      }
+    } catch {
+      //should no longer happen
+      case e: Throwable =>
+        val baos = new ByteArrayOutputStream()
+        e.printStackTrace(new PrintStream(baos))
+        Left("UNEXPECTED ERROR: " + e.getMessage() + "\n" + baos.toString)
+    }
+  }
+
+  def parseModuleType(in: String): Either[String, ModuleType] = {
+    try {
+      parseAll(moduletype, new ParserString(in)) match {
+        case Success(result, _) => Right(result)
+        case NoSuccess(msg, in1) =>
+          Left(msg)
+      }
+    } catch {
+      //should no longer happen
+      case e: Throwable =>
+        val baos = new ByteArrayOutputStream()
+        e.printStackTrace(new PrintStream(baos))
+        Left("UNEXPECTED ERROR: " + e.getMessage() + "\n" + baos.toString)
+    }
+  }
   
-  def definition : Parser[Definition] = let | letrec | typedefinition | exceptiondefinition | 
-                                        classdefinition
-  def all : Parser[Any] =  definition | pattern | typeexpr | classtype 
+  def all : Parser[Any] = moduletype |  definition | pattern | typeexpr | classtype 
 }
 
