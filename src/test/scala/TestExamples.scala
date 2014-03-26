@@ -14,6 +14,8 @@ trait TestExamples extends FunSuite {
   def compareIdentifier(result: Identifier, expect: String)
   def compareModuleType(result: ModuleType, expect: String)
   def compareModuleExpr(result: ModuleExpr, expect: String)
+  def compareUnitImplementation(result: UnitImplementation, expect: String)
+  def compareUnitInterface(result: UnitInterface, expect: String)
 
   implicit def intToOCaml(i: Int) = OInt(i)
   implicit def stringToVar(s: String) = Var(Name(s))
@@ -27,9 +29,23 @@ trait TestExamples extends FunSuite {
   /**
     * Expressions and Pattern
     */
+
   test("int") {
     val result = OInt(2)
     val expect = "2"
+    compareExpr(result, expect)
+  }
+
+  test("var") {
+    val result = Var(Name("ifnot"))
+    val expect = "ifnot"
+    compareExpr(result, expect)
+  }
+
+
+  test("var with path") {
+    val result = Var(Name("ifnot", List("A")))
+    val expect = "A.ifnot"
     compareExpr(result, expect)
   }
 
@@ -130,11 +146,19 @@ trait TestExamples extends FunSuite {
     val expect = """if true then 1 else 0"""
     compareExpr(result, expect)
   }
+
+  test("if then else 2") {
+    val result = IfThenElse("ifnot", OInt(1), OInt(0))
+    val expect = """if ifnot then 1 else 0"""
+    compareExpr(result, expect)
+  }
+
   test("if then + sequence") {
     val result = Sequence(IfThen(True, OInt(1)), OInt(2))
     val expect = """if true then 1; 2"""
     compareExpr(result, expect)
   }
+
   test("if then") {
     val result = IfThen(True, OInt(1))
     val expect = """if true then 1"""
@@ -276,11 +300,11 @@ trait TestExamples extends FunSuite {
 
   test("match variant") {
     val result = Match("fb",
-      Matching(ConstrPattern(Name("Foo"), PVar("x")), "x"),
+      Matching(ConstrPattern(Name("Foo", List("Z")), PVar("x")), "x"),
       Matching(ConstrPattern(Name("Bar"), PVar("x")), "x"))
     val expect = """
     match fb with
-    | Foo(x) -> x
+    | Z.Foo(x) -> x
     | Bar(x) -> x
     """
     compareExpr(result, expect)
@@ -386,9 +410,13 @@ trait TestExamples extends FunSuite {
 
   test("or pattern and underscore pattern") {
     val result = Match("list",
-      Matching(OrPattern(EmptyList, FixSizeList(List(PVar("_")))), Constr(Name("None"))))
+      Matching(
+        OrPattern(OrPattern(EmptyList, FixSizeList(List(PVar("_")))),
+        ConstrPattern(Name("Ks"), PVar("_")))
+        , Constr(Name("None"))))
     val expect = """match list with
-    | [] | [_] -> None"""
+    | (([] | [_]) | Ks(_)) ->  None 
+    """
     compareExpr(result, expect)
   }
 
@@ -450,11 +478,11 @@ trait TestExamples extends FunSuite {
   test("try") {
     val result = Try(
       App(App("List.assoc", "digit"), OList(OInt(2))),
-      Matching(ConstrPattern(Name("Not_found")), OString("not found")))
+      Matching(ConstrPattern(Name("Not_found", List("Err"))), OString("not found")))
     val expect = """ 
     try
       ((List.assoc digit) [2])
-    with |  Not_found -> "not found"
+    with | Err.Not_found -> "not found"
     """
     compareExpr(result, expect)
   }
@@ -1129,6 +1157,78 @@ trait TestExamples extends FunSuite {
   }
 
   /**
+    * Compilation units
+    */
+
+  test("unit implementation") {
+    val result = UnitImplementation(
+      Open(Name("Misc")),
+      IncludeDef(MVar(Name("Misc"))),
+      ModuleTypeDef("foo", mt),
+      ModuleDefinition("Bar", MVar(Name("N")), List("A" -> mt, "B" -> mt), Some(mt)),
+      ModuleDefinition("Bar", MVar(Name("N")), List("A" -> mt)),
+      ModuleDefinition("Bar", MVar(Name("N")) ),
+      ModuleDefinition("Bar", MVar(Name("N")), List(), Some(mt)),
+      ClassDefinition(ClassBinding("c", List(), SimpleClassExpr(List(), Name("cc")),
+        true, List("a"), Some(ClassType(List(), SimpleClassBodyType(List(), Name("ct")))))),
+      ClassDefinition(ClassBinding("c", List(), SimpleClassExpr(List(), Name("cc")),
+        false, List(), None))
+    )
+    val expect = """
+      open Misc;; 
+      include Misc;;
+      module type foo = mt;;
+      module Bar(A : mt) (B : mt) : mt = N;;
+      module Bar(A : mt) = N;;
+      module Bar = N;;
+      module Bar : mt = N;;
+      class virtual ['a] c : ct = cc;;
+      class c = cc
+    """
+    compareUnitImplementation(result, expect)
+  }
+
+  test("unit interface") {
+    val result = UnitInterface(
+      Include(MTVar(ExtendedName("Misc"))),
+      SVal("foo", int),
+      MTException(ConstrDecl("Ex")),
+      ModuleSpecification("Bar", List(), mt),
+      ModuleSpecification("Bar2", List(("A",mt), ("B", mt)), mt),
+      ModuleTypeSpecification("T"),
+      ModuleTypeSpecification("T2", Some(mt)),
+      Include(mt),
+      Open(Name("Tt")),
+      ClassSpecification(
+        ClassSpec("cl", ClassType(List(), NormalClassBodyType(None)),
+          true, List("b", "c")),
+        ClassSpec("cl2", ClassType(List(), NormalClassBodyType(None)))
+      ),
+      ClassTypeDefinition(
+        ClassTypeDef("cl",  NormalClassBodyType(None),
+          true, List("b", "c")),
+        ClassTypeDef("cl2",  NormalClassBodyType(None))
+      )
+      
+    )
+    val expect = """
+      include Misc;;
+      val foo : int;;
+      exception Ex;;
+      module Bar : mt;;
+      module Bar2(A : mt) (B : mt) : mt;;
+      module type T;;
+      module type T2 = mt;;
+      include mt;;
+      open Tt;;
+      class virtual ['b 'c] cl : object end 
+        and cl2 : object end;;
+      class type virtual ['b 'c] cl = object end 
+        and cl2 = object end
+    """
+    compareUnitInterface(result, expect)
+  }
+  /**
     * Names
     */
 
@@ -1136,6 +1236,22 @@ trait TestExamples extends FunSuite {
     val result = Name("n", List("A","B","Z"))
     val expect = """
     A.B.Z.n 
+    """
+    compareIdentifier(result, expect)
+  }
+
+  test("valuepath with +") {
+    val result = Name("(+)", List("A","B","Z"))
+    val expect = """
+    A.B.Z.(+) 
+    """
+    compareIdentifier(result, expect)
+  }
+
+  test("constrpath") {
+    val result = Name("C", List("A","B","Z"))
+    val expect = """
+    A.B.Z.C
     """
     compareIdentifier(result, expect)
   }

@@ -13,7 +13,6 @@ trait Pattern extends Parameter
   * The pattern _ also matches any value, but does not bind any name.
   */
 case class PVar(v: String) extends Pattern
-case object Underscore extends Pattern
 
 /**
   * The pattern pattern1 as  value-name matches the same values as pattern1. 
@@ -129,21 +128,20 @@ trait PatternPrettyPrinter {
         ,"}")
     case ConstrPattern(n) => n
     case ConstrPattern(n, p@ _*) => n <> parens(catList(p.map(showPattern),comma))
-    case OrPattern(a,b) => a <+> "|" <+> b
+    case OrPattern(a,b) => parens(a <+> "|" <+> b)
     case FixSizeList(l) => brackets( catList(l.map(showPattern), semi) )
     case ArrayPattern(l@ _*)         => enclose("[|", catList(l.map(showPattern), semi), "|]")
     case Alias(p,n) => p <+> "as" <+> n
     case PTypeconstr(n) => "#" <> n
     case PolyVariantPattern(n, p) => "`" <> n <+> p
-    case Underscore => "_"
   }
 }
 
 trait PatternParser extends RegexParsers with Parsers {
   self: OCamlParser =>
 
-  def simplepattern: Parser[Pattern] = constant |  pvar | arrayp | listp |
-                                       recordp | typeconstrp | constrp
+  def simplepattern: Parser[Pattern] = polyvariantpattern | constant |  pvar | arrayp | listp |
+                                       recordp | typeconstrp | constrp 
   def pattern: Parser[Pattern] = lvlp0 
   def pvar : Parser[Pattern] = lowercaseident ^^ { PVar(_) }
 
@@ -153,17 +151,17 @@ trait PatternParser extends RegexParsers with Parsers {
   lazy val listp: Parser[Pattern] = "[" ~> rep1sep(pattern, ";") <~ (";" ?) <~ "]" ^^
                             { case l => FixSizeList(l) }
 
-  lazy val asp = (lvlp5 <~ "as") ~ valuename ^^ { case p~n => Alias(p,n) }
+  def asp(p: Pattern) : Parser[Pattern] = "as" ~> valuename ^^ { case n => Alias(p,n) } | success(p)
 
-  lazy val orpattern = (lvlp4 <~ "|") ~ lvlp4 ^^ { case a~b => OrPattern(a,b) }
+  def orpattern(p: Pattern) : Parser[Pattern] = ("|" ~> lvlp2 ^^ { OrPattern(p,_) } into orpattern) | success(p)
 
-  lazy val listop = (lvlp2 <~ "::") ~ repsep(lvlp2, "::") ^^ { case a~b => PList((a::b):_*) }
+  def listop(p: Pattern) : Parser[Pattern] =  "::" ~> repsep(lvlp4, "::") ^^ { case b => PList((p::b):_*) } | success(p)
 
-  lazy val tuplep = (lvlp3 <~ ",") ~ repsep(lvlp3, ",") ^^ { case a~b => PTuple((a::b):_*) }
+  def tuplep (p: Pattern) : Parser[Pattern] = "," ~> repsep(lvlp3, ",") ^^ { case b => PTuple((p::b):_*) } | success(p)
 
   lazy val parenthesesp = "(" ~> pattern <~ ")"
 
-  lazy val constrapp = constrpath ~ lvlp1 ^^ { case f ~ l => ConstrPattern(f, l)} 
+  lazy val constrapp = constrpath ~ lvlp5 ^^ { case f ~ l => ConstrPattern(f, l)} 
 
   lazy val recordp = "{" ~> rep1sep(recordFieldp, ";") <~ "}" ^^
                               { case l => PRecord(l.toMap) }
@@ -174,11 +172,13 @@ trait PatternParser extends RegexParsers with Parsers {
   lazy val typeconstrp = "#" ~> extendedname ^^ { case n => PTypeconstr(n) } 
   lazy val polyvariantpattern = "`" ~> capitalizedident ~  pattern ^^ { case n~p => PolyVariantPattern(n, p) } 
 
-  lazy val lvlp0 = constrapp | polyvariantpattern | lvlp1
-  lazy val lvlp1 = listop | lvlp2
-  lazy val lvlp2 = tuplep | lvlp3
-  lazy val lvlp3 = orpattern | lvlp4
-  lazy val lvlp4 = asp | lvlp5
+  //We use this do represent priorities.
+  //Higher level means higher priority.
+  lazy val lvlp0 = lvlp1 into asp
+  lazy val lvlp1 = lvlp2 into orpattern
+  lazy val lvlp2 = lvlp3 into tuplep
+  lazy val lvlp3 = lvlp4 into listop
+  lazy val lvlp4 = constrapp  | lvlp5
   lazy val lvlp5 = simplepattern | parenthesesp
 
 

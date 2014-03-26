@@ -41,6 +41,8 @@ trait IdentifierPrettyPrinter {
 trait IdentifierParser extends RegexParsers with Parsers {
   self: OCamlParser =>
 
+  lazy val identifier = name | extendedname | valuepath | constrpath
+
   lazy val name: Parser[Name] = (rep1sep(capitalizedident, ".") <~ ".").? ~ lowercaseident ^^
   { case path ~ s => Name(s,path.getOrElse(Nil)) }
 
@@ -57,15 +59,14 @@ trait IdentifierParser extends RegexParsers with Parsers {
   lazy val extendedmodulepath : Parser[ExtendedModulePath] = rep1sep (extendedmodulename, ".") ^^
         { case es => ExtendedModulePath(es) }
 
-  lazy val valuepath: Parser[Name] = (rep1sep(capitalizedident, ".") <~ ".").? ~ 
+  lazy val valuepath: Parser[Name] = ((rep1sep(capitalizedident, ".") <~ ".").?) ~ 
    valuename ^^
   { case path ~ s => Name(s,path.getOrElse(Nil)) }
 
   lazy val constrpath = capitalname
 
-  lazy val capitalname: Parser[Name] = (rep1sep(capitalizedident, ".") <~ ".").? ~ 
-  capitalizedident  ^^
-  { case path ~ s => Name(s,path.getOrElse(Nil)) }
+  lazy val capitalname: Parser[Name] = rep1sep(capitalizedident, ".") <~ not(".") ^^
+    { case path=> Name(path.last , path.dropRight(1)) }
 
   lazy val valuename = (lowercaseident | operatorname)
   lazy val operatorname = "(" ~> (infixop | prefixsymbol) <~")" ^^ { case s => "("+s+")" }
@@ -76,8 +77,8 @@ trait IdentifierParser extends RegexParsers with Parsers {
 
   lazy val labelname = """[a-z_][a-zA-Z0-9_']*""".r into checkKeyword
 
-  lazy val keyword = 
-    (keywords.map(_ + "\\b") ++
+  lazy val keywords = 
+    (keywordlist.map(_ + "\\b") ++
     keysymbols).mkString("", "|", "").r
 
   lazy val infixop =  (infixsymbol |
@@ -85,14 +86,14 @@ trait IdentifierParser extends RegexParsers with Parsers {
   lazy val infixsymbol=  ("""[=<>@^|&+*/$%-]""" + operatorchar + "*").r 
   lazy val operatorchar = """[-!$%&*+./:<=>?@^|~]""".r
 
-  def checkKeyword(s: String) : Parser[String] = if (s.matches(keyword.toString)) failure("keyword used as identifier: " + s) else success(s)
+  def checkKeyword(s: String) : Parser[String] = if (s.matches(keywords.toString)) failure("keyword used as identifier: " + s) else success(s)
 
   lazy val prefixsymbol = (("!"  + operatorchar + "*").r  |
                              ("[?~]" +operatorchar + "+").r ) into checkKeyword
-  val keywords = List(
+  val keywordlist = List(
     "and",
     "as",
-    "assert",
+    //"assert",
     "begin",
     "class",
     "constraint",
@@ -114,7 +115,7 @@ trait IdentifierParser extends RegexParsers with Parsers {
     "inherit",
     "inherit!",
     "initializer",
-    "lazy",
+   // "lazy",
     "let",
     "match",
     "method",

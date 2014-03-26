@@ -25,6 +25,8 @@ trait OCamlPrettyPrinter extends PrettyPrinter with ExprPrettyPrinter
     case e: ModuleExpr => super.pretty(showModuleExpr(e))
     case e: Identifier => super.pretty(showIdentifier(e))
     case e: TopLevelInput => super.pretty(showTopLevelInput(e))
+    case e: UnitInterface => super.pretty(showUnitInterface(e))
+    case e: UnitImplementation => super.pretty(showUnitImplementation(e))
     case e => pretty_any(e)
   }
 

@@ -33,8 +33,7 @@ trait TopLevelSystemPrettyPrinter {
   }
 
   def showDirectiveArgument(dir: DirectiveArgument) : Doc  = dir match {
-    case s: OString => showConstant(s)
-    case i: OInt => showConstant(i)
+    case s: Constant => showConstant(s)
     case n: Name => showIdentifier(n)
   }
 }

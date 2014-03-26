@@ -26,6 +26,8 @@ class PrettyPrinterTest extends FunSuite with TestExamples
   def compareIdentifier(result: Identifier, expect: String) = compare(result, expect)
   def compareModuleExpr(result: ModuleExpr, expect: String) = compare(result, expect)
   def compareModuleType(result: ModuleType, expect: String) = compare(result, expect)
+  def compareUnitImplementation(result: UnitImplementation, expect: String) = compare(result, expect)
+  def compareUnitInterface(result: UnitInterface, expect: String) = compare(result, expect)
 
   def cleanString(s:String) = 
     s.replaceAll("[\n\r]"," ").replaceAll("\\s+", " ").trim

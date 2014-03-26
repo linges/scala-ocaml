@@ -1,4 +1,3 @@
-
 package scalaocaml.test
 import org.scalatest.FunSuite
 import scala.io.Source
@@ -99,6 +98,7 @@ class ParserTest extends FunSuite with TestExamples
     }
   }
 
+
   def compareModuleExpr(term: ModuleExpr, input: String) = {
     OCamlParser.parseModuleExpr(input) match {
       case Right(t) =>
@@ -125,8 +125,38 @@ class ParserTest extends FunSuite with TestExamples
     }
   }
 
+  def compareUnitImplementation(term: UnitImplementation, input: String) = {
+    OCamlParser.parseUnitImplementation(input) match {
+      case Right(t) =>
+        if(t != term)
+          {
+            println(t)
+            println(term)
+          }
+        assert(t == term)
+      case Left(msg) => throw new Exception(msg)
+    }
+  }
+
+  def compareUnitInterface(term: UnitInterface, input: String) = {
+    OCamlParser.parseUnitInterface(input) match {
+      case Right(t) =>
+        if(t != term)
+          {
+            println(t)
+            println(term)
+          }
+        assert(t == term)
+      case Left(msg) => throw new Exception(msg)
+    }
+  }
+
   def cleanString(s:String) = 
     s.replaceAll("[\n\r]"," ").replaceAll("\\s+", " ").trim
+
+
+
+
 
   test("priorities") {
     val result = InfixOp(OInt(2), "+",InfixOp(OInt(3), "*", OInt(4)))
@@ -156,6 +186,24 @@ class ParserTest extends FunSuite with TestExamples
     val result = OInt(2)
     val c = 500 
     val expect =  "("*c + "2" + ")"*c 
+    compareExpr(result, expect)
+  }
+  /**
+    * Comments
+    */
+
+  test("comment") {
+    val result = OInt(2)
+    val expect = "(***** comment  ****) 2"
+    compareExpr(result, expect)
+  }
+
+  test("multi line comments") {
+    val result = OInt(2)
+    val expect = """
+    (*
+     *
+     * comment  *) 2"""
     compareExpr(result, expect)
   }
 }

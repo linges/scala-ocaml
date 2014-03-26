@@ -18,12 +18,23 @@ object OCamlParser extends OCamlParser
 trait OCamlParser extends RegexParsers with Parsers
       with IdentifierParser with ConstantParser with TypeParser with PatternParser with ExprParser
       with ClassParser with ModuleParser {
+
+  protected override val whiteSpace = """(\s|(?m)\(\*(\*(?!\))|[^*])*\*\))+""".r
+
+  //This is necessary to allow names that start with a keyword:
+  //Every literal that is a keyword is convert to a regex that matches
+  //the keyword and a word boundary.
+  override implicit def literal(s: String): Parser[String] =
+    if (keywordlist.contains(s)) 
+      regex((s + """\b""").r) 
+    else super.literal(s)
+
   def parseExpr(in: String): Either[String, Expr] = {
     try {
       parseAll(expr, new ParserString(in)) match {
         case Success(result, _) => Right(result)
         case NoSuccess(msg, in1) =>
-          Left(msg)
+          Left(msg + " (" + in1.pos.line + ":" + in1.pos.column + ")" )
       }
     } catch {
       //should no longer happen
@@ -40,7 +51,7 @@ trait OCamlParser extends RegexParsers with Parsers
       parseAll(classtype, new ParserString(in)) match {
         case Success(result, _) => Right(result)
         case NoSuccess(msg, in1) =>
-          Left(msg)
+          Left(msg + " (" + in1.pos.line + ":" + in1.pos.column + ")" )
       }
     } catch {
       //should no longer happen
@@ -56,7 +67,7 @@ trait OCamlParser extends RegexParsers with Parsers
       parseAll(classexpr, new ParserString(in)) match {
         case Success(result, _) => Right(result)
         case NoSuccess(msg, in1) =>
-          Left(msg)
+          Left(msg + " (" + in1.pos.line + ":" + in1.pos.column + ")" )
       }
     } catch {
       //should no longer happen
@@ -72,7 +83,7 @@ trait OCamlParser extends RegexParsers with Parsers
       parseAll(definition, new ParserString(in)) match {
         case Success(result, _) => Right(result)
         case NoSuccess(msg, in1) =>
-          Left(msg)
+          Left(msg + " (" + in1.pos.line + ":" + in1.pos.column + ")" )
       }
     } catch {
       //should no longer happen
@@ -88,7 +99,7 @@ trait OCamlParser extends RegexParsers with Parsers
       parseAll(typeexpr, new ParserString(in)) match {
         case Success(result, _) => Right(result)
         case NoSuccess(msg, in1) =>
-          Left(msg)
+          Left(msg + " (" + in1.pos.line + ":" + in1.pos.column + ")" )
       }
     } catch {
       //should no longer happen
@@ -103,10 +114,10 @@ trait OCamlParser extends RegexParsers with Parsers
 
   def parseIdentifier(in: String): Either[String, Identifier] = {
     try {
-      parseAll((name | extendedname), new ParserString(in)) match {
+      parseAll(identifier, new ParserString(in)) match {
         case Success(result, _) => Right(result)
         case NoSuccess(msg, in1) =>
-          Left(msg)
+          Left(msg + " (" + in1.pos.line + ":" + in1.pos.column + ")" )
       }
     } catch {
       //should no longer happen
@@ -122,7 +133,7 @@ trait OCamlParser extends RegexParsers with Parsers
       parseAll(all, new ParserString(in)) match {
         case Success(result, _) => Right(result)
         case NoSuccess(msg, in1) =>
-          Left(msg)
+          Left(msg + " (" + in1.pos.line + ":" + in1.pos.column + ")" )
       }
     } catch {
       //should no longer happen
@@ -139,7 +150,7 @@ trait OCamlParser extends RegexParsers with Parsers
       parseAll(moduleexpr, new ParserString(in)) match {
         case Success(result, _) => Right(result)
         case NoSuccess(msg, in1) =>
-          Left(msg)
+          Left(msg + " (" + in1.pos.line + ":" + in1.pos.column + ")" )
       }
     } catch {
       //should no longer happen
@@ -155,7 +166,39 @@ trait OCamlParser extends RegexParsers with Parsers
       parseAll(moduletype, new ParserString(in)) match {
         case Success(result, _) => Right(result)
         case NoSuccess(msg, in1) =>
-          Left(msg)
+          Left(msg + " (" + in1.pos.line + ":" + in1.pos.column + ")" )
+      }
+    } catch {
+      //should no longer happen
+      case e: Throwable =>
+        val baos = new ByteArrayOutputStream()
+        e.printStackTrace(new PrintStream(baos))
+        Left("UNEXPECTED ERROR: " + e.getMessage() + "\n" + baos.toString)
+    }
+  }
+
+  def parseUnitImplementation(in: String): Either[String, UnitImplementation] = {
+    try {
+      parseAll(unitimplementation, new ParserString(in)) match {
+        case Success(result, _) => Right(result)
+        case NoSuccess(msg, in1) =>
+          Left(msg + " (" + in1.pos.line + ":" + in1.pos.column + ")" )
+      }
+    } catch {
+      //should no longer happen
+      case e: Throwable =>
+        val baos = new ByteArrayOutputStream()
+        e.printStackTrace(new PrintStream(baos))
+        Left("UNEXPECTED ERROR: " + e.getMessage() + "\n" + baos.toString)
+    }
+  }
+
+  def parseUnitInterface(in: String): Either[String, UnitInterface] = {
+    try {
+      parseAll(unitinterface, new ParserString(in)) match {
+        case Success(result, _) => Right(result)
+        case NoSuccess(msg, in1) =>
+          Left(msg + " (" + in1.pos.line + ":" + in1.pos.column + ")" )
       }
     } catch {
       //should no longer happen

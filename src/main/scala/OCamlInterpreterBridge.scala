@@ -5,7 +5,7 @@ import java.io._
 object Test {
   def main(args: Array[String]) {
     val oib = new OCamlInterpreterBridge()
-    val input = TopLevelInput(OInt(3), OString("as"))
+    val input = TopLevelInput(OInt(3))
     val (output, errors) = oib.runInterpreter(input)
     print(output)
     print(errors)

@@ -459,7 +459,9 @@ trait ExprParser extends RegexParsers with Parsers {
 
   lazy val instvarassign: Parser[Expr] = (lowercaseident <~ "<-") ~ expr ^^ { case n~e => AssignInstVar(n,e) }
 
-  def sequence(e: Expr)  =  ";" ~> rep1sep(lvl2, ";") ^^ { case l => Sequence(e::l:_*) } | success(e) 
+  // the last optional ; is not part of the specification,
+  // but the ocaml interpreter accepts it, so we allow it too.
+  def sequence(e: Expr) :Parser[Expr] =  ";" ~> expr <~ ";".? ^^ { case l => Sequence(e::l::Nil:_*) }| success(e) 
 
   lazy val letin: Parser[LetIn] = ("let" ~> rep1sep(letbinding, "and") <~ "in") ~ expr ^^
                              { case l~e => LetIn(l,e) }
@@ -507,7 +509,7 @@ trait ExprParser extends RegexParsers with Parsers {
   //It has the nice side effect that the compiler forbids unwanted recursion,
   //if we don't specify a type for the parser.
   lazy val lvl0 = letrecin | letin | otry  | function | fun | lvl1
-  lazy val lvl1 = lvl2  into sequence 
+  lazy val lvl1 = lvl2 into sequence 
   lazy val lvl2 = ifthenelse | ifthen | lvl3
   lazy val lvl3 = instvarassign | lvl4 // <- :=
   lazy val lvl4 = lvl5 into tuple
@@ -516,7 +518,7 @@ trait ExprParser extends RegexParsers with Parsers {
   lazy val lvl7 = (constr | lvl8) into app
   lazy val lvl8 = (lvl9 into selection) into methodcall
   lazy val lvl9 =  prefix | lvl10
-  lazy val lvl10 = ( parentheses | simpleexpr) into methodcall
+  lazy val lvl10 = (parentheses | simpleexpr) into methodcall
 
   lazy val parentheses: Parser[Expr] = "(" ~> expr <~ ")"
   lazy val expr = lvl0  

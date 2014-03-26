@@ -18,7 +18,7 @@ import scala.language.implicitConversions
 sealed abstract class Constant extends Expr with Pattern 
 case class OInt(n: Int) extends Constant with DirectiveArgument
 case class OFloat(n: Double) extends Constant
-sealed abstract class OBoolean extends Constant
+sealed abstract class OBoolean extends Constant with DirectiveArgument
 case object True extends OBoolean
 case object False extends OBoolean
 case class OChar(c: Char) extends Constant 
@@ -56,7 +56,7 @@ trait ConstantParser extends RegexParsers with Parsers {
   lazy val char: Parser[OChar] = """\'.\'""".r ^^ {  s: String => OChar(s.apply(1)) }
   lazy val string: Parser[OString] = """"(\\"|[^"])*"""".r ^^ { s: String => OString(s.substring(1, s.length() - 1)) }
   lazy val num: Parser[OInt] = """-?\d+""".r ^^ { case d => OInt(d.toInt) }
-  //TODO underscore :  For convenience and readability, underscore characters (_) are accepted (and ignored) within floating-point literals.
+  //TODO underscore : For convenience and readability, underscore characters (_) are accepted (and ignored) within floating-point literals.
   lazy val float: Parser[OFloat] = 
     """-?(\d+\.\d*|\.\d+)([Ee](-|\+)?\d+)?""".r ^^ {
      d => OFloat(d.toDouble)
@@ -64,7 +64,7 @@ trait ConstantParser extends RegexParsers with Parsers {
 
   lazy val unit: Parser[Unit.type] = """\(\)""".r ^^ { _ => Unit } 
   lazy val otrue: Parser[True.type] = """true""".r ^^ { _ => True }
-  lazy val ofalse: Parser[False.type] = """False""".r ^^ { _ => False }
+  lazy val ofalse: Parser[False.type] = """false""".r ^^ { _ => False }
   lazy val emptylist: Parser[EmptyList.type] = """\[\]""".r ^^ { _ => EmptyList }
   lazy val emptyarray: Parser[EmptyArray.type] = """\[\|\|\]""".r ^^ { _ => EmptyArray }
   lazy val emptybeginend: Parser[EmptyBeginEnd.type] = """begin end""".r ^^ { _ => EmptyBeginEnd }

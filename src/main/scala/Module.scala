@@ -173,8 +173,17 @@ case class IncludeDef(me: ModuleExpr) extends Definition
 
 case class External(name: String, t: Type, externaldec: String) extends Definition with Specification
 
+case class UnitInterface(s: Specification*)
+case class UnitImplementation(d: Definition*)
+
 trait ModulePrettyPrinter {
   self: OCamlPrettyPrinter =>
+
+  implicit def showUnitInterface(s: UnitInterface) =
+    lsep(s.s.map(showSpecification), ";;" <> line)
+
+  implicit def showUnitImplementation(s: UnitImplementation) =
+    lsep(s.d.map(showDefinition), ";;" <> line)
 
   implicit def showModuleExpr(me: ModuleExpr) : Doc = me match {
     case MVar(n) => n
@@ -241,6 +250,10 @@ trait ModulePrettyPrinter {
 trait ModuleParser extends RegexParsers with Parsers {
   self: OCamlParser =>
 
+  lazy val unitinterface = rep1(specification <~ ";;".?) ^^ { UnitInterface( _ :_ *) }
+
+  lazy val unitimplementation = rep1(definition <~ ";;".?) ^^ { UnitImplementation( _ :_ *) }
+
   lazy val moduletype : Parser[ModuleType] = 
     (mtvar | signatur | functortype | mtparentheses) into mtwith
 
@@ -290,6 +303,8 @@ trait ModuleParser extends RegexParsers with Parsers {
 
   lazy val include = "include" ~> moduletype ^^ { Include(_) }
 
+  lazy val includedef = "include" ~> moduleexpr ^^ { IncludeDef(_) }
+
   lazy val open = "open" ~> capitalname ^^ { Open(_) } 
 
   lazy val moduleexpr : Parser[ModuleExpr] = 
@@ -326,5 +341,5 @@ trait ModuleParser extends RegexParsers with Parsers {
 
   def definition : Parser[Definition] = let | letrec | typedefinition | exceptiondefinition | 
                                         classdefinition | external | classtypedefinition | 
-                                        moduletypedef | moduledef 
+                                        moduletypedef | moduledef | open | includedef
 } 
